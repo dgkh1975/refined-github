@@ -16,13 +16,13 @@ function init(): void {
 	const typeName = isIssues ? 'Issues' : 'Pull Requests';
 
 	const links = [
-		['Commented', `${typeName} you’ve commented on`, `commenter:${getUsername()}`],
-		['Yours', `${typeName} on your repos`, `user:${getUsername()}`]
+		['Commented', `${typeName} you’ve commented on`, `commenter:${getUsername()!}`],
+		['Yours', `${typeName} on your repos`, `user:${getUsername()!}`],
 	] as const;
 
 	for (const [label, title, query] of links) {
 		// Create link
-		const url = new URL(location.pathname, location.origin);
+		const url = new URL(isIssues ? '/issues' : '/pulls', location.origin);
 		url.searchParams.set('q', `${typeQuery} ${defaultQuery} ${query}`);
 		const link = <a href={String(url)} title={title} className="subnav-item">{label}</a>;
 
@@ -44,7 +44,7 @@ function init(): void {
 
 void features.add(__filebasename, {
 	include: [
-		pageDetect.isGlobalConversationList
+		pageDetect.isGlobalConversationList,
 	],
-	init
+	init,
 });

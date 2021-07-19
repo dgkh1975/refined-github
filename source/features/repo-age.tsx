@@ -1,7 +1,6 @@
 import twas from 'twas';
 import cache from 'webext-storage-cache';
 import React from 'dom-chef';
-import select from 'select-dom';
 import {RepoIcon} from '@primer/octicons-react';
 import elementReady from 'element-ready';
 import * as pageDetect from 'github-url-detection';
@@ -9,6 +8,15 @@ import * as pageDetect from 'github-url-detection';
 import features from '.';
 import * as api from '../github-helpers/api';
 import {getRepo} from '../github-helpers';
+
+interface CommitTarget {
+	oid: string;
+	committedDate: string;
+	resourcePath: string;
+	history: {
+		totalCount: number;
+	};
+}
 
 const fresh = [
 	'Freshly baked',
@@ -20,13 +28,13 @@ const fresh = [
 	'Smells fresh',
 	'Just a baby',
 	'It’s my birthday',
-	'So it begins, the great battle of our time'
+	'So it begins, the great battle of our time',
 ];
 
 const dateFormatter = new Intl.DateTimeFormat('en-US', {
 	year: 'numeric',
 	month: 'long',
-	day: 'numeric'
+	day: 'numeric',
 });
 
 const getRepoAge = async (commitSha: string, commitsCount: number): Promise<[committedDate: string, resourcePath: string]> => {
@@ -50,7 +58,7 @@ const getRepoAge = async (commitSha: string, commitsCount: number): Promise<[com
 	const {committedDate, resourcePath} = repository.defaultBranchRef.target.history.nodes
 		.reverse()
 		// Filter out any invalid commit dates #3185
-		.find((commit: AnyObject) => new Date(commit.committedDate).getFullYear() > 1970);
+		.find((commit: CommitTarget) => new Date(commit.committedDate).getFullYear() > 1970);
 
 	return [committedDate, resourcePath];
 };
@@ -73,7 +81,7 @@ const getFirstCommit = cache.function(async (): Promise<[committedDate: string, 
 		}
 	`);
 
-	const {oid: commitSha, history, committedDate, resourcePath} = repository.defaultBranchRef.target;
+	const {oid: commitSha, history, committedDate, resourcePath} = repository.defaultBranchRef.target as CommitTarget;
 	const commitsCount = history.totalCount;
 	if (commitsCount === 1) {
 		return [committedDate, resourcePath];
@@ -81,7 +89,7 @@ const getFirstCommit = cache.function(async (): Promise<[committedDate: string, 
 
 	return getRepoAge(commitSha, commitsCount);
 }, {
-	cacheKey: () => __filebasename + ':' + getRepo()!.nameWithOwner
+	cacheKey: () => __filebasename + ':' + getRepo()!.nameWithOwner,
 });
 
 async function init(): Promise<void> {
@@ -95,48 +103,29 @@ async function init(): Promise<void> {
 		.split(' ');
 
 	// About a day old or less ?
-	const age = Date.now() - birthday.getTime() < 10e7 ?
-		fresh[Math.floor(Math.random() * fresh.length)] :
-		`${value} ${unit} old`;
+	const age = Date.now() - birthday.getTime() < 10e7
+		? fresh[Math.floor(Math.random() * fresh.length)]
+		: `${value} ${unit} old`;
 
 	const sidebarAboutSection = await elementReady('.repository-content .BorderGrid-cell');
-	if (sidebarAboutSection) {
-		sidebarAboutSection.append(
-			<h3 className="sr-only">Repository age</h3>,
-			<div className="mt-3">
-				<a href={firstCommitHref} className="muted-link Link--muted" title={`First commit dated ${dateFormatter.format(birthday)}`}>
-					<RepoIcon className="mr-2"/>{age}
-				</a>
-			</div>
-		);
-
-		return;
-	}
-
-	// Pre "Repository refresh" layout
-	const element = (
-		<li className="text-gray color-text-secondary" title={`First commit dated ${dateFormatter.format(birthday)}`}>
-			<a href={firstCommitHref}>
-				<RepoIcon/> <span className="num text-emphasized">{value}</span> {unit} old
+	sidebarAboutSection!.append(
+		<h3 className="sr-only">Repository age</h3>,
+		<div className="mt-3">
+			<a href={firstCommitHref} className="muted-link Link--muted" title={`First commit dated ${dateFormatter.format(birthday)}`}>
+				<RepoIcon className="mr-2"/>{age}
 			</a>
-		</li>
+		</div>,
 	);
-
-	const license = select('.numbers-summary .octicon-law');
-	if (license) {
-		license.closest('li')!.before(element);
-	} else {
-		select('.numbers-summary')!.append(element);
-	}
 }
 
 void features.add(__filebasename, {
 	include: [
-		pageDetect.isRepoRoot
+		pageDetect.isRepoRoot,
 	],
 	exclude: [
-		pageDetect.isEmptyRepoRoot
+		pageDetect.isEmptyRepoRoot,
 	],
 	awaitDomReady: false,
-	init
+	deduplicate: 'has-rgh-inner',
+	init,
 });

@@ -2,18 +2,19 @@ import './conversation-activity-filter.css';
 import delay from 'delay';
 import React from 'dom-chef';
 import select from 'select-dom';
-import {observe} from 'selector-observer';
+import elementReady from 'element-ready';
 import * as pageDetect from 'github-url-detection';
 import {CheckIcon, EyeClosedIcon, EyeIcon} from '@primer/octicons-react';
 
 import features from '.';
 import onNewComments from '../github-events/on-new-comments';
 import {removeClassFromAll, wrap} from '../helpers/dom-utils';
+import onConversationHeaderUpdate from '../github-events/on-conversation-header-update';
 
 const states = {
 	default: '',
 	showOnlyComments: 'Only show comments',
-	showOnlyUnresolvedComments: 'Only show unresolved comments'
+	showOnlyUnresolvedComments: 'Only show unresolved comments',
 };
 
 type State = keyof typeof states;
@@ -21,8 +22,6 @@ type State = keyof typeof states;
 let currentSetting: State = 'default';
 const dropdownClass = 'rgh-conversation-activity-filter-dropdown';
 const hiddenClassName = 'rgh-conversation-activity-filtered';
-
-const deinit: VoidFunction[] = [];
 
 function isWholeReviewEssentiallyResolved(review: HTMLElement): boolean {
 	const hasMainComment = select.exists('.js-comment[id^=pullrequestreview] .timeline-comment', review);
@@ -96,7 +95,7 @@ async function handleSelection({target}: Event): Promise<void> {
 
 	select('.repository-content')!.classList.toggle(
 		'rgh-conversation-activity-is-filtered',
-		currentSetting !== 'default'
+		currentSetting !== 'default',
 	);
 
 	// Update the state of the other dropdown
@@ -120,7 +119,12 @@ function createRadio(filterSettings: State): JSX.Element {
 	);
 }
 
-function addWidget(position: Element): void {
+async function addWidget(header: string): Promise<void> {
+	const position = (await elementReady(header))!.closest('div')!;
+	if (position.classList.contains('rgh-conversation-activity-filter')) {
+		return;
+	}
+
 	wrap(position, <div className="d-flex flex-items-baseline"/>);
 	position.classList.add('rgh-conversation-activity-filter');
 	position.after(
@@ -143,21 +147,23 @@ function addWidget(position: Element): void {
 					</div>
 				</div>
 			</details-menu>
-		</details>
+		</details>,
 	);
 }
 
-function init(): void {
-	const observer = observe(':is(.gh-header-sticky .meta, .gh-header-meta .flex-auto):not(.rgh-conversation-activity-filter)', {
-		add: addWidget
-	});
-	deinit.push(observer.abort);
+async function init(): Promise<void> {
+	await addWidget('#partial-discussion-header .gh-header-meta :is(clipboard-copy, .flex-auto)');
+	await addWidget('#partial-discussion-header .gh-header-sticky :is(clipboard-copy, relative-time)');
 }
 
 void features.add(__filebasename, {
 	include: [
-		pageDetect.isConversation
+		pageDetect.isConversation,
 	],
+	additionalListeners: [
+		onConversationHeaderUpdate,
+	],
+	awaitDomReady: false,
+	deduplicate: 'has-rgh-inner',
 	init,
-	deinit
 });

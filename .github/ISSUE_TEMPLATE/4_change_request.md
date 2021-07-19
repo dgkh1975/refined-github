@@ -1,5 +1,5 @@
 ---
-name: Change requests
+name: 🤌 Complain
 about: Is there something you don't like? Let's talk
 labels: change request
 ---

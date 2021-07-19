@@ -1,16 +1,15 @@
 import React from 'dom-chef';
-import cache from 'webext-storage-cache';
 import select from 'select-dom';
 import domLoaded from 'dom-loaded';
 import stripIndent from 'strip-indent';
 import {Promisable} from 'type-fest';
-import elementReady from 'element-ready';
-import compareVersions from 'tiny-version-compare';
 import * as pageDetect from 'github-url-detection';
 
+import waitFor from '../helpers/wait-for';
 import onNewComments from '../github-events/on-new-comments';
 import bisectFeatures from '../helpers/bisect';
 import optionsStorage, {RGHOptions} from '../options-storage';
+import {getLocalHotfixesAsOptions, updateHotfixes} from '../helpers/hotfix';
 
 type BooleanFunction = () => boolean;
 type CallerFunction = (callback: VoidFunction) => void;
@@ -45,77 +44,90 @@ interface InternalRunConfig {
 }
 
 let log: typeof console.log;
+const {version} = browser.runtime.getManifest();
 
-function logError(id: FeatureID, error: Error | string | unknown, ...extras: unknown[]): void {
-	if (error instanceof TypeError && error.message === 'Object(...)(...) is null') {
-		error.message = 'The element wasn’t found, the selector needs to be updated.';
-	}
-
+let logError = (id: FeatureID, error: unknown): void => {
 	const message = error instanceof Error ? error.message : String(error);
 
 	if (message.includes('token')) {
-		console.log(`ℹ️ Refined GitHub → ${id} →`, message);
+		console.log(`ℹ️ ${id} →`, message);
 		return;
 	}
 
-	// Don't change this to `throw Error` because Firefox doesn't show extensions' errors in the console.
-	// Use `return` after calling this function.
-	console.error(
-		`❌ Refined GitHub → ${id} →`,
-		error,
-		...extras,
-		stripIndent(`
-			Search issue: https://github.com/sindresorhus/refined-github/issues?q=is%3Aissue+${encodeURIComponent(message)}
+	// Don't change this to `throw Error` because Firefox doesn't show extensions' errors in the console
+	console.group('❌', id, version, pageDetect.isEnterprise() ? 'GHE →' : '→', error);
 
-			Open an issue: https://github.com/sindresorhus/refined-github/issues/new?labels=bug&template=bug_report.md&title=${encodeURIComponent(`\`${id}\`: ${message}`)}
-		`)
-	);
-}
+	console.group('Search issue');
+	console.log(`https://github.com/sindresorhus/refined-github/issues?q=is%3Aissue+${encodeURIComponent(message)}`);
+	console.groupEnd();
+
+	const newIssueUrl = new URL('https://github.com/sindresorhus/refined-github/issues/new?labels=bug&template=1_bug_report.md');
+	newIssueUrl.searchParams.set('title', `\`${id}\`: ${message}`);
+	newIssueUrl.searchParams.set('body', stripIndent(`
+		<!-- Please also include a screenshot if the issue is visible -->
+
+		URL: ${location.href}
+
+		\`\`\`
+		${error instanceof Error ? error.stack! : error as string}
+		\`\`\`
+	`));
+	console.group('Open an issue');
+	console.log(newIssueUrl.href);
+	console.groupEnd();
+
+	console.groupEnd();
+};
 
 // eslint-disable-next-line no-async-promise-executor -- Rule assumes we don't want to leave it pending
 const globalReady: Promise<RGHOptions> = new Promise(async resolve => {
-	await elementReady('body', {waitForChildren: false});
-
-	if (pageDetect.is500()) {
-		return;
-	}
-
-	if (document.title === 'Confirm password' || document.title === 'Confirm access') {
-		return;
-	}
-
-	if (document.body.classList.contains('logged-out')) {
-		console.warn('%cRefined GitHub%c is only expected to work when you’re logged in to GitHub.', 'font-weight: bold', '');
-	}
-
-	if (select.exists('html.refined-github')) {
-		console.warn('Refined GitHub has been loaded twice. If you didn’t install the developer version, this may be a bug. Please report it to: https://github.com/sindresorhus/refined-github/issues/565');
-		return;
-	}
-
-	document.documentElement.classList.add('refined-github');
-
-	// Options defaults
-	const [options, hotfix, bisectedFeatures] = await Promise.all([
+	const [options, localHotfixes, bisectedFeatures] = await Promise.all([
 		optionsStorage.getAll(),
-		browser.runtime.getManifest().version === '0.0.0' || await cache.get('hotfix'), // Ignores the cache when loaded locally
-		bisectFeatures()
+		getLocalHotfixesAsOptions(version),
+		bisectFeatures(),
 	]);
+
+	if (options.customCSS.trim().length > 0) {
+		await waitFor(() => document.head);
+		document.head.append(<style>{options.customCSS}</style>);
+	}
 
 	if (bisectedFeatures) {
 		Object.assign(options, bisectedFeatures);
 	} else {
 		// If features are remotely marked as "seriously breaking" by the maintainers, disable them without having to wait for proper updates to propagate #3529
-		void checkForHotfixes();
-		Object.assign(options, hotfix);
-	}
-
-	if (options.customCSS.trim().length > 0) {
-		document.head.append(<style>{options.customCSS}</style>);
+		void updateHotfixes();
+		Object.assign(options, localHotfixes);
 	}
 
 	// Create logging function
 	log = options.logging ? console.log : () => {/* No logging */};
+
+	await waitFor(() => document.body);
+
+	if (pageDetect.is500() || pageDetect.isPasswordConfirmation()) {
+		return;
+	}
+
+	if (select.exists('html.refined-github')) {
+		console.warn(stripIndent(`
+			Refined GitHub has been loaded twice. This may be because:
+
+			• You loaded the developer version, or
+			• The extension just updated
+
+			If you see this at every load, please open an issue mentioning the browser you're using and the URL where this appears.
+		`));
+		return;
+	}
+
+	if (select.exists('body.logged-out')) {
+		console.warn('Refined GitHub is only expected to work when you’re logged in to GitHub. Errors will not be shown.');
+		features.error = () => {/* No logging */};
+		logError = () => {/* No logging */};
+	}
+
+	document.documentElement.classList.add('refined-github');
 
 	resolve(options);
 });
@@ -163,36 +175,16 @@ const setupPageLoad = async (id: FeatureID, config: InternalRunConfig): Promise<
 	}
 };
 
-const checkForHotfixes = cache.function(async () => {
-	// The explicit endpoint is necessary because it shouldn't change on GHE
-	const request = await fetch('https://api.github.com/repos/sindresorhus/refined-github/contents/hotfix.json?ref=hotfix');
-	const response = await request.json();
-	const hotfixes: AnyObject | false = JSON.parse(atob(response.content));
-
-	// eslint-disable-next-line @typescript-eslint/prefer-optional-chain -- https://github.com/typescript-eslint/typescript-eslint/issues/1893
-	if (hotfixes && hotfixes.unaffected) {
-		const currentVersion = browser.runtime.getManifest().version;
-		if (compareVersions(hotfixes.unaffected, currentVersion) < 1) {
-			return {};
-		}
-	}
-
-	return hotfixes;
-}, {
-	maxAge: {hours: 6},
-	cacheKey: () => 'hotfix'
-});
-
 const shortcutMap = new Map<string, string>();
 
 const defaultPairs = new Map([
-	[pageDetect.hasComments, onNewComments]
+	[pageDetect.hasComments, onNewComments],
 ]);
 
 function enforceDefaults(
 	id: FeatureID,
 	include: InternalRunConfig['include'],
-	additionalListeners: InternalRunConfig['additionalListeners']
+	additionalListeners: InternalRunConfig['additionalListeners'],
 ): void {
 	for (const [detection, listener] of defaultPairs) {
 		if (!include.includes(detection)) {
@@ -228,7 +220,7 @@ const add = async (id: FeatureID, ...loaders: FeatureLoader[]): Promise<void> =>
 			awaitDomReady = true,
 			deduplicate = 'has-rgh',
 			onlyAdditionalListeners = false,
-			additionalListeners = []
+			additionalListeners = [],
 		} = loader;
 
 		// Register feature shortcuts
@@ -261,13 +253,14 @@ const add = async (id: FeatureID, ...loaders: FeatureLoader[]): Promise<void> =>
 	}
 };
 
-const addCssFeature = async (id: FeatureID, include: BooleanFunction[]): Promise<void> => {
+const addCssFeature = async (id: FeatureID, include: BooleanFunction[], deduplicate?: false | string): Promise<void> => {
 	void add(id, {
 		include,
+		deduplicate,
 		awaitDomReady: false,
 		init: () => {
 			document.body.classList.add('rgh-' + id);
-		}
+		},
 	});
 };
 
@@ -282,7 +275,8 @@ void add(__filebasename, {
 		// `await` kicks it to the next tick, after the other features have checked for 'has-rgh', so they can run once.
 		await Promise.resolve();
 		select('#js-repo-pjax-container, #js-pjax-container')?.append(<has-rgh/>);
-	}
+		select('#repo-content-pjax-container')?.append(<has-rgh-inner/>); // #4567
+	},
 });
 
 const features = {
@@ -291,7 +285,7 @@ const features = {
 	error: logError,
 	shortcutMap,
 	list: __features__,
-	meta: __featuresMeta__
+	meta: __featuresMeta__,
 };
 
 export default features;

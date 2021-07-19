@@ -69,7 +69,7 @@ function addDropdownLink(comment: HTMLElement, timestamp: string): void {
 			>
 				View repo at this time
 			</a>
-		</>
+		</>,
 	);
 }
 
@@ -91,11 +91,8 @@ async function showTimemachineBar(): Promise<void | false> {
 			return false;
 		}
 
-		const lastCommitDate = await elementReady([
-			'.repository-content .Box.Box--condensed relative-time',
-			'[itemprop="dateModified"] relative-time' // "Repository refresh" layout
-		].join(), {waitForChildren: false});
-		if (date > lastCommitDate?.attributes.datetime.value!) {
+		const lastCommitDate = await elementReady('.repository-content .Box.Box--condensed relative-time', {waitForChildren: false});
+		if (lastCommitDate && date > lastCommitDate.getAttribute('datetime')!) {
 			return false;
 		}
 
@@ -108,15 +105,15 @@ async function showTimemachineBar(): Promise<void | false> {
 	}
 
 	addNotice(
-		<>You can also <a className="rgh-link-date" href={String(url)}>view this object as it appeared at the time of the comment</a> (<relative-time datetime={date}/>)</>
+		<>You can also <a className="rgh-link-date" href={String(url)}>view this object as it appeared at the time of the comment</a> (<relative-time datetime={date}/>)</>,
 	);
 }
 
 function init(): void {
 	// PR reviews' main content has nested `.timeline-comment`, but the deepest one doesn't have `relative-time`. These are filtered out with `:not([id^="pullrequestreview"])`
 	const comments = select.all(`
-		:not(.js-new-comment-form):not(#issuecomment-new):not([id^="pullrequestreview"]) > .timeline-comment:not(.rgh-time-machine-links),
-		.review-comment > .previewable-edit:not(.is-pending):not(.rgh-time-machine-links)
+		:not(.js-new-comment-form, #issuecomment-new, [id^="pullrequestreview"]) > .timeline-comment:not(.rgh-time-machine-links),
+		.review-comment > .previewable-edit:not(.is-pending, .rgh-time-machine-links)
 	`);
 
 	for (const comment of comments) {
@@ -130,18 +127,22 @@ function init(): void {
 
 void features.add(__filebasename, {
 	include: [
-		pageDetect.hasComments
+		pageDetect.hasComments,
 	],
-	init
+	exclude: [
+		pageDetect.isGist,
+	],
+	deduplicate: 'has-rgh-inner',
+	init,
 }, {
 	include: [
 		pageDetect.is404,
 		pageDetect.isSingleFile,
-		pageDetect.isRepoTree
+		pageDetect.isRepoTree,
 	],
 	exclude: [
-		() => !new URLSearchParams(location.search).has('rgh-link-date')
+		() => !new URLSearchParams(location.search).has('rgh-link-date'),
 	],
 	awaitDomReady: false,
-	init: showTimemachineBar
+	init: showTimemachineBar,
 });

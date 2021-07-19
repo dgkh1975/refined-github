@@ -13,16 +13,12 @@ import observeElement from '../helpers/simplified-element-observer';
 const cacheKey = 'files-hidden';
 
 function addButton(): void {
-	// `div` excludes `include-fragment`, which means the list is still loading. #2160
-	const filesHeader = select([
-		'div.commit-tease',
-		'.Box-header--blue .Details > :last-child > ul' // "Repository refresh" layout
-	]);
-	if (!filesHeader || select.exists('.rgh-toggle-files')) {
+	const commitsInfo = select('.repository-content .octicon-history')?.closest('ul');
+	if (!commitsInfo || select.exists('.rgh-toggle-files')) {
 		return;
 	}
 
-	filesHeader.append(
+	commitsInfo.append(
 		<button
 			type="button"
 			className="btn-octicon rgh-toggle-files"
@@ -30,7 +26,7 @@ function addButton(): void {
 		>
 			<FoldIcon/>
 			<UnfoldIcon/>
-		</button>
+		</button>,
 	);
 }
 
@@ -51,9 +47,9 @@ async function init(): Promise<void> {
 
 void features.add(__filebasename, {
 	include: [
-		pageDetect.isRepoTree
+		pageDetect.isRepoTree,
 	],
 	awaitDomReady: false,
 	deduplicate: false,
-	init
+	init,
 });

@@ -25,7 +25,10 @@ function init(): void {
 
 void features.add(__filebasename, {
 	include: [
-		pageDetect.isCompare
+		pageDetect.isCompare,
 	],
-	init
+	exclude: [
+		() => /\.\.+/.exec(location.pathname)?.[0]!.length === 2,
+	],
+	init,
 });

@@ -9,17 +9,16 @@ import features from '.';
 import * as api from '../github-helpers/api';
 import {buildRepoURL, getRepo} from '../github-helpers';
 
+interface FileType {
+	name: string;
+	type: string;
+}
+
 const getCacheKey = (): string => `changelog:${getRepo()!.nameWithOwner}`;
-const changelogNames = new Set(['changelog', 'news', 'changes', 'history', 'release', 'whatsnew']);
 
+const changelogFiles = /^(changelog|news|changes|history|release|whatsnew)(\.(mdx?|mkdn?|mdwn|mdown|markdown|litcoffee|txt|rst))?$/i;
 function findChangelogName(files: string[]): string | false {
-	for (const file of files) {
-		if (changelogNames.has(file.toLowerCase().split('.', 1)[0])) {
-			return file;
-		}
-	}
-
-	return false;
+	return files.find(name => changelogFiles.test(name)) ?? false;
 }
 
 function parseFromDom(): false {
@@ -43,7 +42,7 @@ const getChangelogName = cache.function(async (): Promise<string | false> => {
 	`);
 
 	const files: string[] = [];
-	for (const entry of repository.object.entries) {
+	for (const entry of repository.object.entries as FileType[]) {
 		if (entry.type === 'blob') {
 			files.push(entry.name);
 		}
@@ -51,7 +50,7 @@ const getChangelogName = cache.function(async (): Promise<string | false> => {
 
 	return findChangelogName(files);
 }, {
-	cacheKey: getCacheKey
+	cacheKey: getCacheKey,
 });
 
 async function init(): Promise<void | false> {
@@ -70,19 +69,19 @@ async function init(): Promise<void | false> {
 		>
 			<BookIcon className="text-blue color-text-link mr-2"/>
 			<span>Changelog</span>
-		</a>
+		</a>,
 	);
 }
 
 void features.add(__filebasename, {
 	include: [
-		pageDetect.isReleasesOrTags
+		pageDetect.isReleasesOrTags,
 	],
 	awaitDomReady: false,
-	init
+	init,
 }, {
 	include: [
-		pageDetect.isRepoHome
+		pageDetect.isRepoHome,
 	],
-	init: parseFromDom
+	init: parseFromDom,
 });

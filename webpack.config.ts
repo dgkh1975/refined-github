@@ -1,6 +1,6 @@
 /// <reference types="./source/globals" />
 
-import path from 'path';
+import path from 'node:path';
 import SizePlugin from 'size-plugin';
 import TerserPlugin from 'terser-webpack-plugin';
 import CopyWebpackPlugin from 'copy-webpack-plugin';
@@ -9,31 +9,20 @@ import webpack, {Configuration} from 'webpack';
 
 import {getFeatures, getFeaturesMeta} from './build/readme-parser';
 
-let isWatching = false;
-
-export function throwError(id: string, error: string): void {
-	const errorMessage = `❌ \`${id}\` → ${error}`;
-	if (!isWatching) {
-		throw new Error(errorMessage);
-	}
-
-	console.error(errorMessage);
-}
-
 const config: Configuration = {
 	devtool: 'source-map',
 	stats: {
 		all: false,
-		errors: true
+		errors: true,
 	},
 	entry: Object.fromEntries([
 		'refined-github',
 		'background',
 		'options',
-		'resolve-conflicts'
+		'resolve-conflicts',
 	].map(name => [name, `./source/${name}`])),
 	output: {
-		path: path.resolve('distribution/build')
+		path: path.resolve('distribution/build'),
 	},
 	module: {
 		rules: [
@@ -42,51 +31,42 @@ const config: Configuration = {
 				loader: 'esbuild-loader',
 				options: {
 					loader: 'tsx',
-					target: 'es2020'
-				}
+					target: 'es2020',
+				},
 			},
 			{
 				test: /\.css$/,
 				use: [
 					MiniCssExtractPlugin.loader,
-					'css-loader'
-				]
-			}
-		]
+					'css-loader',
+				],
+			},
+		],
 	},
 	plugins: [
 		new webpack.DefinePlugin({
 			// Passing `true` as the second argument makes these values dynamic — so every file change will update their value.
 			__features__: webpack.DefinePlugin.runtimeValue(() => JSON.stringify(getFeatures()), true),
 			__featuresMeta__: webpack.DefinePlugin.runtimeValue(() => JSON.stringify(getFeaturesMeta()), true),
-			__filebasename: webpack.DefinePlugin.runtimeValue(
-				info => {
-					const {name, ext} = path.parse(info.module.resource);
-					if (ext !== '.tsx') {
-						throwError(name, `has a ${ext} extension but should be .tsx`);
-					}
-
-					return JSON.stringify(name);
-				}
-			)
+			__filebasename: webpack.DefinePlugin.runtimeValue(info => JSON.stringify(path.parse(info.module.resource).name)),
 		}),
 		new MiniCssExtractPlugin(),
 		new CopyWebpackPlugin({
 			patterns: [{
-				from: require.resolve('webextension-polyfill')
-			}]
+				from: require.resolve('webextension-polyfill'),
+			}],
 		}),
-		new SizePlugin({writeFile: false})
+		new SizePlugin({writeFile: false}),
 	],
 	resolve: {
 		alias: {
-			react: 'dom-chef'
+			react: 'dom-chef',
 		},
 		extensions: [
 			'.tsx',
 			'.ts',
-			'.js'
-		]
+			'.js',
+		],
 	},
 	optimization: {
 		// Keeps it somewhat readable for AMO reviewers
@@ -98,15 +78,12 @@ const config: Configuration = {
 					mangle: false,
 					output: {
 						beautify: true,
-						indent_level: 2
-					}
-				}
-			})
-		]
-	}
+						indent_level: 2,
+					},
+				},
+			}),
+		],
+	},
 };
 
-export default function webpackSetup(_: string, options: webpack.WebpackOptionsNormalized): Configuration {
-	isWatching = Boolean(options.watch);
-	return config;
-}
+export default config;

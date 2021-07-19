@@ -1,6 +1,7 @@
 import React from 'dom-chef';
 import select from 'select-dom';
 import * as pageDetect from 'github-url-detection';
+import {DiffRenamedIcon} from '@primer/octicons-react';
 
 import features from '.';
 import * as api from '../github-helpers/api';
@@ -23,19 +24,16 @@ async function linkify(button: HTMLButtonElement, url: GitHubURL): Promise<void 
 
 	const fromKey = isNewer ? 'previous_filename' : 'filename';
 	const toKey = isNewer ? 'filename' : 'previous_filename';
-	const sha = (isNewer ? select : select.last)([
-		'.commit .sha', // Pre "Repository refresh" layout
-		'[aria-label="Copy the full SHA"] + a'
-	])!;
+	const sha = (isNewer ? select : select.last)('[aria-label="Copy the full SHA"]')!;
 
-	const files = await findRename(sha.textContent!.trim());
+	const files = await findRename(sha.getAttribute('value')!);
 
 	for (const file of files) {
 		if (file[fromKey] === url.filePath) {
 			if (file.status === 'renamed') {
 				url.assign({
 					route: 'commits',
-					filePath: file[toKey]
+					filePath: file[toKey],
 				});
 				button.replaceWith(
 					<a
@@ -43,8 +41,10 @@ async function linkify(button: HTMLButtonElement, url: GitHubURL): Promise<void 
 						aria-label={`Renamed ${isNewer ? 'to' : 'from'} ${file[toKey]}`}
 						className="btn btn-outline BtnGroup-item tooltipped tooltipped-n tooltipped-no-delay"
 					>
+						{isNewer && <DiffRenamedIcon className="mr-1" transform="rotate(180)"/>}
 						{button.textContent}
-					</a>
+						{!isNewer && <DiffRenamedIcon className="ml-1"/>}
+					</a>,
 				);
 			}
 
@@ -69,7 +69,7 @@ function init(): void | false {
 
 void features.add(__filebasename, {
 	include: [
-		pageDetect.isRepoCommitList
+		pageDetect.isRepoCommitList,
 	],
-	init
+	init,
 });

@@ -18,7 +18,7 @@ const countPRs = cache.function(async (forkedRepo: string): Promise<[prCount: nu
 		search(
 			first: 100,
 			type: ISSUE,
-			query: "repo:${forkedRepo} is:pr is:open author:${getUsername()}"
+			query: "repo:${forkedRepo} is:pr is:open author:${getUsername()!}"
 		) {
 			nodes {
 				... on PullRequest {
@@ -43,16 +43,13 @@ const countPRs = cache.function(async (forkedRepo: string): Promise<[prCount: nu
 }, {
 	maxAge: {hours: 1},
 	staleWhileRevalidate: {days: 2},
-	cacheKey: ([forkedRepo]): string => 'prs-on-forked-repo:' + forkedRepo + ':' + getRepo()!.nameWithOwner
+	cacheKey: ([forkedRepo]): string => 'prs-on-forked-repo:' + forkedRepo + ':' + getRepo()!.nameWithOwner,
 });
 
 // eslint-disable-next-line @typescript-eslint/ban-types
 async function getPRs(): Promise<[prCount: number, url: string] | []> {
 	// Wait for the tab bar to be loaded
-	await elementReady([
-		'.pagehead', // Pre "Repository refresh" layout
-		'.UnderlineNav-body'
-	].join());
+	await elementReady('.UnderlineNav-body');
 	if (!pageDetect.canUserEditRepo()) {
 		return [];
 	}
@@ -63,7 +60,7 @@ async function getPRs(): Promise<[prCount: number, url: string] | []> {
 		return [count, `/${forkedRepo}/pull/${firstPr!}`];
 	}
 
-	return [count, `/${forkedRepo}/pulls?q=is%3Apr+is%3Aopen+sort%3Aupdated-desc+author%3A${getUsername()}`];
+	return [count, `/${forkedRepo}/pulls?q=is%3Apr+is%3Aopen+sort%3Aupdated-desc+author%3A${getUsername()!}`];
 }
 
 async function initHeadHint(): Promise<void | false> {
@@ -74,7 +71,7 @@ async function initHeadHint(): Promise<void | false> {
 
 	select(`[data-hovercard-type="repository"][href="/${getForkedRepo()!}"]`)!.after(
 		// The class is used by `quick-fork-deletion`
-		<> with <a href={url} className="rgh-open-prs-of-forks">{getLinkCopy(count)}</a></>
+		<> with <a href={url} className="rgh-open-prs-of-forks">{getLinkCopy(count)}</a></>,
 	);
 }
 
@@ -87,26 +84,26 @@ async function initDeleteHint(): Promise<void | false> {
 	select('details-dialog[aria-label*="Delete"] .Box-body p:first-child')!.after(
 		<p className="flash flash-warn">
 			It will also abandon <a href={url}>your {getLinkCopy(count)}</a> in <strong>{getForkedRepo()!}</strong> and you’ll no longer be able to edit {count === 1 ? 'it' : 'them'}.
-		</p>
+		</p>,
 	);
 }
 
 void features.add(__filebasename, {
 	include: [
-		pageDetect.isRepo
+		pageDetect.isRepo,
 	],
 	exclude: [
-		() => !pageDetect.isForkedRepo()
+		() => !pageDetect.isForkedRepo(),
 	],
 	awaitDomReady: false,
-	init: initHeadHint
+	init: initHeadHint,
 }, {
 	include: [
-		pageDetect.isRepoMainSettings
+		pageDetect.isRepoMainSettings,
 	],
 	exclude: [
-		() => !pageDetect.isForkedRepo()
+		() => !pageDetect.isForkedRepo(),
 	],
 	awaitDomReady: false,
-	init: initDeleteHint
+	init: initDeleteHint,
 });

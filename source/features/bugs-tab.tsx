@@ -16,7 +16,7 @@ async function highlightBugsTabOnIssuePage(): Promise<void | false> {
 		return false;
 	}
 
-	const bugsTab = await elementReady('.rgh-bug-tab', {stopOnDomReady: false, timeout: 10000});
+	const bugsTab = await elementReady('.rgh-bug-tab', {stopOnDomReady: false, timeout: 10_000});
 	bugsTab!.classList.add('selected');
 
 	const issuesTab = select('.UnderlineNav-item[data-hotkey="g i"]')!;
@@ -35,7 +35,7 @@ const countBugs = cache.function(async (): Promise<number> => {
 }, {
 	maxAge: {minutes: 30},
 	staleWhileRevalidate: {days: 4},
-	cacheKey: (): string => __filebasename + ':' + getRepo()!.nameWithOwner
+	cacheKey: (): string => __filebasename + ':' + getRepo()!.nameWithOwner,
 });
 
 async function init(): Promise<void | false> {
@@ -74,25 +74,15 @@ async function init(): Promise<void | false> {
 	issuesTab.removeAttribute('data-selected-links');
 
 	// Update its appearance
-	const bugsTabTitle = select('[data-content]', bugsTab);
-	if (bugsTabTitle) {
-		bugsTabTitle.dataset.content = 'Bugs';
-		bugsTabTitle.textContent = 'Bugs';
-		select('.octicon', bugsTab)!.replaceWith(<BugIcon className="UnderlineNav-octicon d-none d-sm-inline"/>);
+	const bugsTabTitle = select('[data-content]', bugsTab)!;
+	bugsTabTitle.dataset.content = 'Bugs';
+	bugsTabTitle.textContent = 'Bugs';
+	select('.octicon', bugsTab)!.replaceWith(<BugIcon className="UnderlineNav-octicon d-none d-sm-inline"/>);
 
-		// Un-select one of the tabs if necessary
-		const selectedTab = !isBugsPage || pageDetect.isPRList() ? bugsTab : issuesTab;
-		selectedTab.classList.remove('selected');
-		selectedTab.removeAttribute('aria-current');
-	} else {
-		// Pre "Repository refresh" layout
-		select('[itemprop="name"]', bugsTab)!.textContent = 'Bugs';
-		select('.octicon', bugsTab)!.replaceWith(<BugIcon/>);
-
-		// Change the Selected tab if necessary
-		bugsTab.classList.toggle('selected', isBugsPage && !pageDetect.isPRList());
-		select('.selected', issuesTab)?.classList.toggle('selected', !isBugsPage);
-	}
+	// Un-select one of the tabs if necessary
+	const selectedTab = !isBugsPage || pageDetect.isPRList() ? bugsTab : issuesTab;
+	selectedTab.classList.remove('selected');
+	selectedTab.removeAttribute('aria-current');
 
 	// Set temporary counter
 	const bugsCounter = select('.Counter', bugsTab)!;
@@ -122,15 +112,15 @@ async function init(): Promise<void | false> {
 
 void features.add(__filebasename, {
 	include: [
-		pageDetect.isRepo
+		pageDetect.isRepo,
 	],
 	awaitDomReady: false,
-	init
+	init,
 }, {
 	include: [
-		pageDetect.isIssue
+		pageDetect.isIssue,
 	],
 	awaitDomReady: false,
 	deduplicate: false,
-	init: highlightBugsTabOnIssuePage
+	init: highlightBugsTabOnIssuePage,
 });

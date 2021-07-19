@@ -1,5 +1,5 @@
-import React from 'dom-chef';
 import cache from 'webext-storage-cache';
+import React from 'dom-chef';
 import select from 'select-dom';
 import {parseCron} from '@cheap-glitch/mi-cron';
 import elementReady from 'element-ready';
@@ -9,10 +9,11 @@ import features from '.';
 import * as api from '../github-helpers/api';
 import {getRepo} from '../github-helpers';
 
-const getScheduledWorkflows = cache.function(async (): Promise<Record<string, string> | false> => {
-	const {repository: {object: {entries: workflows}}} = await api.v4(`
+// eslint-disable-next-line import/prefer-default-export
+export const getWorkflows = cache.function(async (): Promise<AnyObject[]> => {
+	const {repository: {workflowFiles}} = await api.v4(`
 		repository() {
-			object(expression: "HEAD:.github/workflows") {
+			workflowFiles: object(expression: "HEAD:.github/workflows") {
 				... on Tree {
 					entries {
 						object {
@@ -25,13 +26,23 @@ const getScheduledWorkflows = cache.function(async (): Promise<Record<string, st
 			}
 		}
 	`);
-	if (!workflows) {
+
+	return workflowFiles?.entries ?? [];
+}, {
+	maxAge: {days: 1},
+	staleWhileRevalidate: {days: 10},
+	cacheKey: () => 'workflows:' + getRepo()!.nameWithOwner,
+});
+
+const getScheduledWorkflows = async (): Promise<Record<string, string> | false> => {
+	const workflows = await getWorkflows();
+	if (workflows.length === 0) {
 		return false;
 	}
 
 	const schedules: Record<string, string> = {};
 	for (const workflow of workflows) {
-		const workflowYaml = workflow.object.text;
+		const workflowYaml: string = workflow.object.text;
 		const name = /^name[:\s'"]+([^'"\n]+)/m.exec(workflowYaml);
 		const cron = /schedule[:\s-]+cron[:\s'"]+([^'"\n]+)/m.exec(workflowYaml);
 
@@ -41,11 +52,7 @@ const getScheduledWorkflows = cache.function(async (): Promise<Record<string, st
 	}
 
 	return schedules;
-}, {
-	maxAge: {days: 1},
-	staleWhileRevalidate: {days: 10},
-	cacheKey: () => __filebasename + ':' + getRepo()!.nameWithOwner
-});
+};
 
 async function init(): Promise<false | void> {
 	const workflows = await getScheduledWorkflows();
@@ -77,8 +84,8 @@ async function init(): Promise<false | void> {
 
 void features.add(__filebasename, {
 	include: [
-		pageDetect.isRepositoryActions
+		pageDetect.isRepositoryActions,
 	],
 	awaitDomReady: false,
-	init
+	init,
 });

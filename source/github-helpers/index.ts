@@ -17,13 +17,13 @@ export const getConversationNumber = (): string | undefined => {
 };
 
 const typesWithCommittish = new Set(['tree', 'blob', 'blame', 'edit', 'commit', 'commits', 'compare']);
-const titleWithCommittish = / at (?<branch>[\w-/]+)( · [\w-]+\/[\w-]+)?$/i;
+const titleWithCommittish = / at (?<branch>[.\w-/]+)( · [\w-]+\/[\w-]+)?$/i;
 export const getCurrentCommittish = (pathname = location.pathname, title = document.title): string | undefined => {
 	if (!pathname.startsWith('/')) {
 		throw new TypeError(`Expected pathname starting with /, got "${pathname}"`);
 	}
 
-	const [, _user, _repo, type, unslashedCommittish] = pathname.split('/');
+	const [type, unslashedCommittish] = pathname.split('/').slice(3);
 	if (!type || !typesWithCommittish.has(type)) {
 		// Root; or piece of information not applicable to the page
 		return;
@@ -38,6 +38,7 @@ export const getCurrentCommittish = (pathname = location.pathname, title = docum
 };
 
 export const isFirefox = navigator.userAgent.includes('Firefox/');
+export const isMac = navigator.userAgent.includes('Macintosh');
 
 // The type requires at least one parameter https://stackoverflow.com/a/49910890
 export const buildRepoURL = (...pathParts: Array<string | number> & {0: string}): string => {
@@ -89,31 +90,6 @@ export function getLatestVersionTag(tags: string[]): string {
 	return latestVersion;
 }
 
-const escapeRegex = (string: string): string => string.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&');
-const prCommitPathnameRegex = /[/][^/]+[/][^/]+[/]pull[/](\d+)[/]commits[/]([\da-f]{7})[\da-f]{33}(?:#[\w-]+)?\b/; // eslint-disable-line unicorn/better-regex
-export const prCommitUrlRegex = new RegExp('\\b' + escapeRegex(location.origin) + prCommitPathnameRegex.source, 'gi');
-
-const prComparePathnameRegex = /[/][^/]+[/][^/]+[/]compare[/](.+)(#diff-[\da-fR-]+)/; // eslint-disable-line unicorn/better-regex
-export const prCompareUrlRegex = new RegExp('\\b' + escapeRegex(location.origin) + prComparePathnameRegex.source, 'gi');
-
-// To be used as replacer callback in string.replace()
-export function preventPrCommitLinkLoss(url: string, pr: string, commit: string, index: number, fullText: string): string {
-	if (fullText[index + url.length] === ')') {
-		return url;
-	}
-
-	return `[\`${commit}\` (#${pr})](${url})`;
-}
-
-// To be  used as replacer callback in string.replace() for compare links
-export function preventPrCompareLinkLoss(url: string, compare: string, hash: string, index: number, fullText: string): string {
-	if (fullText[index + url.length] === ')') {
-		return url;
-	}
-
-	return `[\`${compare}\`${hash.slice(0, 16)}](${url})`;
-}
-
 // https://github.com/idimetrix/text-case/blob/master/packages/upper-case-first/src/index.ts
 export function upperCaseFirst(input: string): string {
 	return input.charAt(0).toUpperCase() + input.slice(1).toLowerCase();
@@ -129,10 +105,10 @@ export async function isPermalink(): Promise<boolean> {
 	await elementReady('[data-hotkey="w"]');
 	return (
 		// Pre "Latest commit design updates"
-		/Tag|Tree/.test(select('[data-hotkey="w"] i')?.textContent!) || // Text appears in the branch selector
+		/Tag|Tree/.test(select('[data-hotkey="w"] i')?.textContent ?? '') // Text appears in the branch selector
 
 		// "Latest commit design updates"
-		select.exists('[data-hotkey="w"] .octicon-tag') // Tags have an icon
+		|| select.exists('[data-hotkey="w"] .octicon-tag') // Tags have an icon
 	);
 }
 

@@ -9,7 +9,11 @@ function init(): void {
 
 void features.add(__filebasename, {
 	include: [
-		pageDetect.isConversationList
+		pageDetect.isConversationList,
 	],
-	init
+	exclude: [
+		pageDetect.isMilestone,
+	],
+	deduplicate: 'has-rgh-inner',
+	init,
 });

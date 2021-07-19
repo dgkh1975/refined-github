@@ -4,13 +4,23 @@ import select from 'select-dom';
 import * as pageDetect from 'github-url-detection';
 
 import features from '.';
+import {getCleanPathname} from '../github-helpers';
 
-const isGist = (link: HTMLAnchorElement): boolean =>
-	!link.pathname.includes('.') && // Exclude links to embed files
-	(
-		(link.hostname.startsWith('gist.') && link.pathname.includes('/', 1)) || // Exclude user links
-		link.pathname.startsWith('gist/')
-	);
+function parseGistLink(link: HTMLAnchorElement): string | undefined {
+	if (link.host === 'gist.github.com') {
+		return getCleanPathname(link);
+	}
+
+	if (link.host === location.host && link.pathname.startsWith('gist/')) {
+		return link.pathname.replace('/gist', '').replace(/\/$/, '');
+	}
+
+	return undefined;
+}
+
+function isGist(link: HTMLAnchorElement): boolean {
+	return parseGistLink(link)?.replace(/[^/]/g, '').length === 1; // Exclude user links and file links
+}
 
 const isOnlyChild = (link: HTMLAnchorElement): boolean => link.textContent!.trim() === link.parentNode!.textContent!.trim();
 
@@ -21,7 +31,7 @@ async function embedGist(link: HTMLAnchorElement): Promise<void> {
 	try {
 		// Fetch via background.js due to CORB policies
 		const gistData = await browser.runtime.sendMessage({fetchJSON: `${link.href}.json`});
-		if (gistData.div.length > 10000) {
+		if (gistData.div.length > 10_000) {
 			info.textContent = ' (too large to embed)';
 			return;
 		}
@@ -40,7 +50,7 @@ async function embedGist(link: HTMLAnchorElement): Promise<void> {
 				`}
 				</style>,
 				<link rel="stylesheet" href={gistData.stylesheet}/>,
-				domify.one(gistData.div)!
+				domify.one(gistData.div)!,
 			);
 			link.parentElement!.after(container);
 			info.remove();
@@ -60,7 +70,7 @@ function init(): void {
 
 void features.add(__filebasename, {
 	include: [
-		pageDetect.hasComments
+		pageDetect.hasComments,
 	],
-	init
+	init,
 });

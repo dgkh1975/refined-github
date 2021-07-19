@@ -21,17 +21,14 @@ function updateLinkElement(link: HTMLAnchorElement, type: GitHubConversationType
 	searchQuery.add(`is:${type}`);
 
 	link.append(
-		<include-fragment src={`${link.pathname}/count${link.search}`}/>
+		<include-fragment src={`${link.pathname}/count${link.search}`}/>,
 	);
 }
 
 function init(): void {
 	cleanLinks();
 
-	const issueLink = select([
-		'nav.menu a[href*="&type=Issues"]', // Only for GHE
-		'a.menu-item[href*="&type=issues"]'
-	])!;
+	const issueLink = select('a.menu-item[href*="&type=issues"]')!;
 	updateLinkElement(issueLink, 'issue');
 
 	// We don't need to clone the child nodes because they get replaced anyways
@@ -63,7 +60,7 @@ function init(): void {
 void features.add(__filebasename, {
 	include: [
 		pageDetect.isRepoSearch,
-		pageDetect.isGlobalSearchResults
+		pageDetect.isGlobalSearchResults,
 	],
-	init
+	init,
 });

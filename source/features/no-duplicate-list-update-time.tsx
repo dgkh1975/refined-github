@@ -10,7 +10,7 @@ function parseTime(element: HTMLElement): number {
 function init(): void {
 	for (const issue of select.all('.js-navigation-item[id^="issue_"]')) {
 		const [stateChangeTime, updateTime] = select.all('relative-time', issue);
-		if (parseTime(updateTime) - parseTime(stateChangeTime) < 10000) { // Hide if within 10 seconds
+		if (parseTime(updateTime) - parseTime(stateChangeTime) < 10_000) { // Hide if within 10 seconds
 			updateTime.parentElement!.remove();
 		}
 	}
@@ -18,10 +18,10 @@ function init(): void {
 
 void features.add(__filebasename, {
 	include: [
-		pageDetect.isConversationList
+		pageDetect.isConversationList,
 	],
 	exclude: [
-		() => !location.search.includes('sort%3Aupdated-')
+		() => !location.search.includes('sort%3Aupdated-'),
 	],
-	init
+	init,
 });

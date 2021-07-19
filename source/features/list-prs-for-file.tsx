@@ -1,12 +1,13 @@
 import React from 'dom-chef';
 import cache from 'webext-storage-cache';
-import select from 'select-dom';
+import elementReady from 'element-ready';
 import * as pageDetect from 'github-url-detection';
 import {GitPullRequestIcon} from '@primer/octicons-react';
 
 import features from '.';
 import * as api from '../github-helpers/api';
 import getDefaultBranch from '../github-helpers/get-default-branch';
+import addAfterBranchSelector from '../helpers/add-after-branch-selector';
 import {buildRepoURL, getRepo} from '../github-helpers';
 
 function getPRUrl(prNumber: number): string {
@@ -16,7 +17,7 @@ function getPRUrl(prNumber: number): string {
 function getDropdown(prs: number[]): HTMLElement {
 	// Markup copied from https://primer.style/css/components/dropdown
 	return (
-		<details className="ml-2 dropdown details-reset details-overlay d-inline-block flex-self-center">
+		<details className="dropdown details-reset details-overlay d-inline-block flex-self-center">
 			<summary aria-haspopup="true" className="btn btn-sm">
 				<GitPullRequestIcon/> {prs.length} <div className="dropdown-caret"/>
 			</summary>
@@ -96,12 +97,12 @@ const getPrsByFile = cache.function(async (): Promise<Record<string, number[]>> 
 }, {
 	maxAge: {hours: 2},
 	staleWhileRevalidate: {days: 9},
-	cacheKey: () => __filebasename + ':' + getRepo()!.nameWithOwner
+	cacheKey: () => __filebasename + ':' + getRepo()!.nameWithOwner,
 });
 
 async function init(): Promise<void> {
 	// `clipboard-copy` on blob page, `#blob-edit-path` on edit page
-	const path = select('clipboard-copy, #blob-edit-path')!.getAttribute('value')!;
+	const path = (await elementReady('clipboard-copy, #blob-edit-path'))!.getAttribute('value')!;
 	let {[path]: prs} = await getPrsByFile();
 
 	if (!prs) {
@@ -119,40 +120,43 @@ async function init(): Promise<void> {
 	const [prNumber] = prs; // First one or only one
 
 	if (pageDetect.isEditingFile()) {
-		select('.file')!.after(
+		(await elementReady('.file'))!.after(
 			<div className="form-warning p-3 mb-3 mx-lg-3">
 				{
-					prs.length === 1 ?
-						<>Careful, PR <a href={getPRUrl(prNumber)}>#{prNumber}</a> is already touching this file</> :
-						<>
-							Careful, {prs.length} open PRs are already touching this file
-							<span className="ml-2 BtnGroup" style={{verticalAlign: '-0.6em'}}>
-								{prs.map(getSingleButton)}
-							</span>
-						</>
+					prs.length === 1
+						? <>Careful, PR <a href={getPRUrl(prNumber)}>#{prNumber}</a> is already touching this file</>
+						: (
+							<>
+								Careful, {prs.length} open PRs are already touching this file
+								<span className="ml-2 BtnGroup" style={{verticalAlign: '-0.6em'}}>
+									{prs.map(getSingleButton)}
+								</span>
+							</>
+						)
 				}
-			</div>
+			</div>,
 		);
 
 		return;
 	}
 
 	if (prs.length > 1) {
-		select('.breadcrumb')!.before(getDropdown(prs));
+		await addAfterBranchSelector(getDropdown(prs));
 		return;
 	}
 
 	const link = getSingleButton(prNumber);
-	link.classList.add('ml-2', 'tooltipped', 'tooltipped-ne');
+	link.classList.add('tooltipped', 'tooltipped-ne');
 	link.setAttribute('aria-label', `This file is touched by PR #${prNumber}`);
-	select('.breadcrumb')!.before(link);
+	await addAfterBranchSelector(link);
 }
 
 void features.add(__filebasename, {
 	include: [
 		pageDetect.isEditingFile,
-		pageDetect.isSingleFile
+		pageDetect.isSingleFile,
 	],
 	deduplicate: '.rgh-list-prs-for-file', // #3945
-	init
+	awaitDomReady: false,
+	init,
 });

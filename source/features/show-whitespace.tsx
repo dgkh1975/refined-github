@@ -5,8 +5,8 @@ import * as pageDetect from 'github-url-detection';
 
 import features from '.';
 import getTextNodes from '../helpers/get-text-nodes';
-import onPrFileLoad from '../github-events/on-pr-file-load';
 import onNewComments from '../github-events/on-new-comments';
+import onDiffFileLoad from '../github-events/on-diff-file-load';
 
 // `splitText` is used before and after each whitespace group so a new whitespace-only text node is created. This new node is then wrapped in a <span>
 function showWhiteSpacesOn(line: Element): void {
@@ -46,7 +46,7 @@ function showWhiteSpacesOn(line: Element): void {
 			textNode.after(
 				<span data-rgh-whitespace={thisCharacter === '\t' ? 'tab' : 'space'}>
 					{textNode.nextSibling}
-				</span>
+				</span>,
 			);
 		}
 	}
@@ -70,11 +70,12 @@ function init(): void {
 
 void features.add(__filebasename, {
 	include: [
-		pageDetect.hasCode
+		pageDetect.hasCode,
 	],
 	additionalListeners: [
 		onNewComments,
-		onPrFileLoad
+		onDiffFileLoad,
 	],
-	init
+	deduplicate: '.rgh-observing-whitespace',
+	init,
 });

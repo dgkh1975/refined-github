@@ -30,9 +30,9 @@ async function createBranch(newBranchName: string, baseSha: string): Promise<tru
 		method: 'POST',
 		body: {
 			sha: baseSha,
-			ref: 'refs/heads/' + newBranchName
+			ref: 'refs/heads/' + newBranchName,
 		},
-		ignoreHTTPStatus: true
+		ignoreHTTPStatus: true,
 	});
 
 	return response.ok || response.message;
@@ -65,18 +65,14 @@ async function cloneBranch({delegateTarget: cloneButton}: delegate.Event): Promi
 
 	textFieldEdit.set(
 		select('input[name="query"]')!,
-		newBranchName
+		newBranchName,
 	);
 }
 
 async function init(): Promise<void | false> {
 	await api.expectToken();
-	const deleteIconClass = [
-		'branch-filter-item-controller .octicon-trashcan', // Pre "Repository refresh" layout
-		'branch-filter-item .octicon-trash'
-	].join();
 
-	observe(deleteIconClass, {
+	observe('branch-filter-item .octicon-trash', {
 		add(deleteIcon) {
 			// Branches with open PRs use `span`, the others use `form`
 			deleteIcon.closest('form, span')!.before(
@@ -86,9 +82,9 @@ async function init(): Promise<void | false> {
 					className="link-gray Link--secondary btn-link tooltipped tooltipped-nw ml-3 rgh-clone-branch"
 				>
 					<GitBranchIcon/>
-				</button>
+				</button>,
 			);
-		}
+		},
 	});
 
 	delegate(document, '.rgh-clone-branch', 'click', cloneBranch);
@@ -96,7 +92,7 @@ async function init(): Promise<void | false> {
 
 void features.add(__filebasename, {
 	include: [
-		pageDetect.isBranches
+		pageDetect.isBranches,
 	],
-	init: onetime(init)
+	init: onetime(init),
 });

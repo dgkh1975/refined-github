@@ -41,6 +41,29 @@ GitHub Enterprise is also supported: [How to enable it](https://fregante.github.
 	<a href="https://retool.com/?utm_campaign=sindresorhus">
 		<img src="https://sindresorhus.com/assets/thanks/retool-logo.svg" width="210">
 	</a>
+	<br>
+	<br>
+	<a href="https://workos.com/?utm_campaign=github_repo&utm_medium=referral&utm_content=refined-github&utm_source=github">
+		<div>
+			<img src="https://sindresorhus.com/assets/thanks/workos-logo-white-bg.svg" width="210" alt="WorkOS">
+		</div>
+		<b>Your app, enterprise-ready.</b>
+		<div>
+			<sub>Start selling to enterprise customers with just a few lines of code.</sub>
+			<br>
+			<sup>Add Single Sign-On (and more) in minutes instead of months.</sup>
+		</div>
+	</a>
+	<br>
+	<br>
+	<a href="https://oss.capital">
+		<div>
+			<img src="https://sindresorhus.com/assets/thanks/oss-capital-logo-white-bg2.svg" width="300" alt="OSS Capital">
+		</div>
+		<sub>Founded in 2018, OSS Capital is the first and only venture capital platform focused</sub>
+		<br>
+		<sup>exclusively on supporting early-stage COSS (commercial open source) startup founders.</sup>
+	</a>
 </div>
 
 ---
@@ -108,11 +131,9 @@ Thanks for contributing! 🦋🙌
 ### Repositories
 
 - [](# "ci-link") 🔥 [Adds a build/CI status icon next to the repo’s name.](https://user-images.githubusercontent.com/1402241/32562120-d65166e4-c4e8-11e7-90fb-cbaf36e2709f.png)
-- [](# "remove-projects-tab") Hides the `Projects` tab from repositories and profiles when it’s empty.
-    * New projects can still be created via the [`Create new…` menu](https://user-images.githubusercontent.com/1402241/34909214-18b6fb2e-f8cf-11e7-8556-bed748596d3b.png).
 - [](# "hide-watch-and-fork-count") [Hides watcher counter and on smaller screens the fork counter too.](https://user-images.githubusercontent.com/1402241/53681077-f3328b80-3d1e-11e9-9e29-2cb017141769.png)
 - [](# "sort-milestones-by-closest-due-date") Changes the default sort order of milestones `Closest due date`.
-- [](# "more-dropdown") [Adds useful links to the repository navigation dropdown and moves the "Security" and "Insights" tabs to it as well.](https://user-images.githubusercontent.com/1402241/55089736-d94f5300-50e8-11e9-9095-329ac74c1e9f.png)
+- [](# "more-dropdown-links") [Adds useful links to the repository navigation dropdown](https://user-images.githubusercontent.com/16872793/124681432-856e6f80-de96-11eb-89c9-6d78e8ae4329.png)
 - [](# "star-repo-hotkey") Adds a keyboard shortcut to star/unstar the current repo: <kbd>g</kbd> <kbd>s</kbd>.
 - [](# "default-branch-button") 🔥 [Adds a link to the default branch on directory listings and files.](https://user-images.githubusercontent.com/1402241/71886648-2891dc00-316f-11ea-98d8-c5bf6c24d85c.png)
 - [](# "swap-branches-on-compare") [Adds a link to swap branches in the branch compare view.](https://user-images.githubusercontent.com/857700/42854438-821096f2-8a01-11e8-8752-76f7563b5e18.png)
@@ -129,6 +150,7 @@ Thanks for contributing! 🦋🙌
 - [](# "next-scheduled-github-action") [Shows the next scheduled time of relevant GitHub Actions in the workflows sidebar.](https://user-images.githubusercontent.com/46634000/94690232-2476a180-0330-11eb-99d7-e174bb762cea.png)
 - [](# "quick-repo-deletion") [Lets you delete your repos in a click, if they have no stars, issues, or PRs.](https://user-images.githubusercontent.com/1402241/99716945-54a80a00-2a6e-11eb-9107-f3517a6ab1bc.gif)
 - [](# "useful-forks") [Helps you find the most active forks](https://user-images.githubusercontent.com/38117856/107463541-542e8500-6b2c-11eb-8b25-082f344c1587.png), via https://useful-forks.github.io.
+- [](# "clean-repo-tabs") [Moves the "Security" and "Insights"  to the repository navigation dropdown. Also moves the "Projects", "Actions" and "Wiki" tabs if they're empty/unused.](https://user-images.githubusercontent.com/16872793/124681343-4a6c3c00-de96-11eb-9055-a8fc551e6eb8.png)
 
 <!-- Refer to style guide above. Keep this message between sections. -->
 
@@ -143,7 +165,7 @@ Thanks for contributing! 🦋🙌
 - [](# "show-associated-branch-prs-on-fork") [Shows the associated pull requests on branches for forked repositories.](https://user-images.githubusercontent.com/16872793/81504659-7e5ec800-92b8-11ea-9ee6-924110e8cca1.png)
 - [](# "html-preview-link") [Adds a link to preview HTML files.](https://user-images.githubusercontent.com/44045911/67634792-48995980-f8fb-11e9-8b6a-7b57d5b12a2f.png)
 - [](# "hide-markdown-diff") 🔥 [When editing Markdown files, it lets you hide the Markdown diff in the preview.](https://user-images.githubusercontent.com/46634000/108093883-7f5e2a80-707e-11eb-9328-cb902a1061c7.gif)
-- [](# "collapse-markdown-sections") [Lets you collapse sections in Markdown and help you see the outline of the document.](https://user-images.githubusercontent.com/46634000/110379737-7cd86a80-8057-11eb-92e2-aed6b0fe35b2.gif)
+- [](# "collapse-wiki-sections") [Lets you collapse sections in Wikis and help you see the outline of the document.](https://user-images.githubusercontent.com/46634000/110379737-7cd86a80-8057-11eb-92e2-aed6b0fe35b2.gif)
 
 <!-- Refer to style guide above. Keep this message between sections. -->
 
@@ -157,6 +179,7 @@ Thanks for contributing! 🦋🙌
 - [](# "refined-github.css") [Reduces tabs’ size to 4 spaces instead of 8.](https://cloud.githubusercontent.com/assets/170270/14170088/d3be931e-f755-11e5-8edf-c5f864336382.png)
 - [](# "esc-to-deselect-line") [Adds a keyboard shortcut to deselect the current line: <kbd>esc</kbd>.](https://github.com/sindresorhus/refined-github/issues/1590)
 - [](# "vertical-front-matter") [Shows Markdown front matter as vertical table.](https://user-images.githubusercontent.com/44045911/87251695-26069b00-c4a0-11ea-9077-53ce366490ed.png)
+- [](# "list-pr-for-branch") [On branch commit lists, shows the PR that touches the current branch.](https://user-images.githubusercontent.com/16872793/119760295-b8751a80-be77-11eb-87da-91d0c403bb49.png)
 
 <!-- Refer to style guide above. Keep this message between sections. -->
 
@@ -176,6 +199,9 @@ Thanks for contributing! 🦋🙌
 - [](# "table-input") [Adds a button in the text editor to quickly insert a simplified HTML table.](https://user-images.githubusercontent.com/46634000/94559114-09892c00-0261-11eb-8fb0-c5a85ea76b6f.gif)
 - [](# "unfinished-comments") [Notifies the user of unfinished comments in hidden tabs.](https://user-images.githubusercontent.com/1402241/97792086-423d5d80-1b9f-11eb-9a3a-daf716d10b0e.gif)
 - [](# "wait-for-attachments") [Wait for the attachments to finish uploading before allowing to post a comment.](https://user-images.githubusercontent.com/46634000/104294547-9b8b0c80-54bf-11eb-93e5-65ae158353b3.gif)
+- [](# "delete-review-comments-faster") [Adds a button to delete review comments in one click when editing them.](https://user-images.githubusercontent.com/46634000/115445792-9fdd6900-a216-11eb-9ba3-6dab4d2f9d32.png)
+- [](# "avoid-accidental-submissions") [Disables the <kbd>enter</kbd>-to-submit shortcut in some commit/PR/issue title fields to avoid accidental submissions. Use <kbd>ctrl</kbd><kbd>enter</kbd> instead.](https://user-images.githubusercontent.com/723651/125863341-6cf0bce0-f120-4cec-ac1f-1ce35920e7a7.gif)
+- [](# "comment-on-draft-pr-indicator") [Reminds you you’re commenting on a draft PR by changing the submit button’s label.](https://user-images.githubusercontent.com/723651/123682081-39e31280-d853-11eb-9c86-97be400aca67.jpg)
 
 <!-- Refer to style guide above. Keep this message between sections. -->
 
@@ -242,6 +268,7 @@ Thanks for contributing! 🦋🙌
 - [](# "git-checkout-pr") [Adds copy-pastable git commands to checkout a PR.](https://user-images.githubusercontent.com/16872793/96938908-8e024f80-1499-11eb-8976-0caf95175dd6.png)
 - [](# "jump-to-change-requested-comment") [Adds a link to jump to the latest changed requested comment.](https://user-images.githubusercontent.com/19198931/98718312-418b9f00-23c9-11eb-8da2-dfb616e95eb6.gif)
 - [](# "view-last-pr-deployment") [Adds a link to open the last deployment from the header of a PR.](https://user-images.githubusercontent.com/16872793/111904355-ef185a00-8a1c-11eb-97dd-aa0272547e73.png)
+- [](# "no-useless-split-diff-view") [Always uses unified diffs on files where split diffs aren’t useful.](https://user-images.githubusercontent.com/46634000/121495005-89af8600-c9d9-11eb-822d-77e0b987e3b1.png)
 
 <!-- Refer to style guide above. Keep this message between sections. -->
 
@@ -254,7 +281,7 @@ Thanks for contributing! 🦋🙌
 - [](# "warning-for-disallow-edits") [Warns you when unchecking `Allow edits from maintainers`, as it’s maintainer-hostile.](https://user-images.githubusercontent.com/1402241/53151888-24101380-35ef-11e9-8d30-d6315ad97325.gif)
 - [](# "pull-request-hotkey") [Adds keyboard shortcuts to cycle through PR tabs: <kbd>g</kbd> <kbd>←</kbd> and <kbd>g</kbd> <kbd>→</kbd>, or <kbd>g</kbd> <kbd>1</kbd>, <kbd>g</kbd> <kbd>2</kbd>, <kbd>g</kbd> <kbd>3</kbd> and <kbd>g</kbd> <kbd>4</kbd>](https://user-images.githubusercontent.com/16872793/94634958-7e7b5680-029f-11eb-82ea-1f96cd11e4cd.png).
 - [](# "pr-branch-auto-delete") Automatically deletes the branch right after merging a PR, if possible.
-- [](# "separate-draft-pr-button") [Lets you create draft pull requests in one click.](https://user-images.githubusercontent.com/202916/67269317-cd791300-f4b6-11e9-89d1-392de7ef71e1.png)
+- [](# "one-click-pr-or-gist") [Lets you create draft pull requests and public gists in one click.](https://user-images.githubusercontent.com/723651/119256942-cacb2c00-bbcb-11eb-905b-3434e5c2fdcc.jpg)
 - [](# "clear-pr-merge-commit-message") [Clears the PR merge commit message of clutter, leaving only deduplicated co-authors.](https://user-images.githubusercontent.com/1402241/79257078-62b6fc00-7e89-11ea-8798-c06f33baa94b.png)
 - [](# "faster-reviews") [Adds a review button to the PR sidebar, automatically focuses the review textarea and adds a keyboard shortcut to open the review popup: <kbd>v</kbd>.](https://user-images.githubusercontent.com/202916/83269671-bb3b2200-a1c7-11ea-90b3-b9457a454162.png)
 - [](# "use-first-commit-message-for-new-prs") [Uses the first commit for a new PR’s title and description.](https://user-images.githubusercontent.com/16872793/87246205-ccf42400-c419-11ea-86d5-0e6570d99e6e.gif)
@@ -266,7 +293,6 @@ Thanks for contributing! 🦋🙌
 - [](# "patch-diff-links") [Adds links to `.patch` and `.diff` files in commits.](https://cloud.githubusercontent.com/assets/737065/13605562/22faa79e-e516-11e5-80db-2da6aa7965ac.png)
 - [](# "raw-file-link") [Adds a link to view the raw version of files in PRs and commits.](https://user-images.githubusercontent.com/1402241/56484988-b99f2500-6504-11e9-9748-c944e1070cc8.png)
 - [](# "faster-pr-diff-options") [Adds one-click buttons to change diff style and to ignore the whitespace and a keyboard shortcut to ignore the whitespace: <kbd>d</kbd> <kbd>w</kbd>.](https://user-images.githubusercontent.com/1402241/54178764-d1c96080-44d1-11e9-889c-734ffd2a602d.png)
-- [](# "link-to-file-in-file-history") [Adds links to the file itself in a file’s commit list.](https://user-images.githubusercontent.com/22439276/57195061-b88ddf00-6f6b-11e9-8ad9-13225d09266d.png)
 - [](# "extend-diff-expander") [Widens the `Expand diff` button to be clickable across the screen.](https://user-images.githubusercontent.com/6978877/34470024-eee4f43e-ef20-11e7-9036-65094bd58960.PNG)
 - [](# "remove-diff-signs") [Hides diff signs since diffs are color coded already.](https://user-images.githubusercontent.com/1402241/54807718-149cec80-4cb9-11e9-869c-e265863211e3.png)
 - [](# "suggest-commit-title-limit") [Suggests limiting commit titles to 72 characters.](https://user-images.githubusercontent.com/37769974/60379478-106b3280-9a51-11e9-88b9-0e3607f214cd.gif)
@@ -314,6 +340,16 @@ Thanks for contributing! 🦋🙌
 
 <!-- Refer to style guide above. Keep this message between sections. -->
 
+### Notifications
+
+- [](# "open-all-notifications") [Adds a button to open all your unread notifications at once.](https://user-images.githubusercontent.com/1402241/80861295-fbad8b80-8c6d-11ea-87a4-8025fbc3a3f4.png)
+- [](# "select-all-notifications-shortcut") Adds a shortcut to select all visible notifications: <kbd>a</kbd>.
+- [](# "linkify-notification-repository-header") [Linkifies the header of each notification group (when grouped by repository).](https://user-images.githubusercontent.com/1402241/80849887-81531c00-8c19-11ea-8777-7294ce318630.png)
+- [](# "stop-redirecting-in-notification-bar") [Stops redirecting to notification inbox from notification bar actions while holding <kbd>Alt</kbd>.](https://user-images.githubusercontent.com/202916/80318782-c38cef80-880c-11ea-9226-72c585f42a51.png)
+- [](# "select-notifications") 🔥 [Select notifications by type and status.](https://user-images.githubusercontent.com/46634000/124293072-8df13e00-db56-11eb-952a-5c9e1bd11b24.mp4)
+
+<!-- Refer to style guide above. Keep this message between sections. -->
+
 ### Global
 
 - [](# "useful-not-found-page") 🔥 [Adds possible related pages and alternatives on 404 pages.](https://user-images.githubusercontent.com/1402241/46402857-7bdada80-c733-11e8-91a1-856573078ff5.png)
@@ -323,12 +359,8 @@ Thanks for contributing! 🦋🙌
 - [](# "parse-backticks") [Renders `` `text in backticks` `` in issue titles, commit titles and more places.](https://user-images.githubusercontent.com/170270/55060505-31179b00-50a4-11e9-99a9-c3691ba38d66.png)
 - [](# "trending-menu-item") Adds a `Trending` link to the global navbar and a keyboard shortcut: <kbd>g</kbd> <kbd>t</kbd>.
 - [](# "navigate-pages-with-arrow-keys") Adds shortcuts to navigate through pages with pagination: <kbd>←</kbd> and <kbd>→</kbd>.
-- [](# "open-all-notifications") [Adds a button to open all your unread notifications at once.](https://user-images.githubusercontent.com/1402241/80861295-fbad8b80-8c6d-11ea-87a4-8025fbc3a3f4.png)
 - [](# "action-used-by-link") [Lets you see how others are using the current Action in the Marketplace.](https://user-images.githubusercontent.com/8360597/80250140-86d9c080-8673-11ea-9d28-f62faf9fd3d4.png)
 - [](# "improve-shortcut-help") [Shows all of Refined GitHub’s new keyboard shortcuts in the help modal (<kbd>?</kbd> hotkey).](https://user-images.githubusercontent.com/29176678/36999174-9f07d33e-20bf-11e8-83e3-b3a9908a4b5f.png)
-- [](# "stop-redirecting-in-notification-bar") [Stops redirecting to notification inbox from notification bar actions while holding <kbd>Alt</kbd>.](https://user-images.githubusercontent.com/202916/80318782-c38cef80-880c-11ea-9226-72c585f42a51.png)
-- [](# "hide-zero-packages") [Hides the `Packages` tab in user profiles if it’s empty.](https://user-images.githubusercontent.com/46634000/101151879-9ade9b00-3622-11eb-9755-50ed54099e02.png)
-- [](# "select-all-notifications-shortcut") Adds a shortcut to select all visible notifications: <kbd>a</kbd>.
 - [](# "global-search-filters") [Adds search filters in global search page: forks, private repos, own repos, authored commits.](https://user-images.githubusercontent.com/44045911/112261285-88a66c80-8ca6-11eb-82cb-933b72c57abd.png)
 
 <!-- Refer to style guide above. Keep this message between sections. -->
@@ -348,8 +380,7 @@ Thanks for contributing! 🦋🙌
 - [](# "linkify-labels-on-dashboard") [Makes labels clickable on the dashboard.](https://user-images.githubusercontent.com/1402241/69045444-6ef97300-0a29-11ea-99a3-9a622c395709.png)
 - [](# "reload-failed-proxied-images") [Retries downloading images that failed downloading due to GitHub limited proxying.](https://user-images.githubusercontent.com/14858959/64068746-21991100-cc45-11e9-844e-827f5ac9b51e.png)
 - [](# "unwrap-useless-dropdowns") [Makes some dropdowns 1-click instead of unnecessarily 2-click.](https://user-images.githubusercontent.com/1402241/80859624-9bfdb300-8c62-11ea-837f-7b7a28e6fdfc.png)
-- [](# "linkify-notification-repository-header") [Linkifies the header of each notification group (when grouped by repository).](https://user-images.githubusercontent.com/1402241/80849887-81531c00-8c19-11ea-8777-7294ce318630.png)
-- [](# "prevent-pr-commit-link-loss") [Suggests fixing your PR Commit links before commenting. GitHub has a bug that causes these link to appear as plain commit links, without association to the PR.](https://user-images.githubusercontent.com/1402241/82131169-93fd5180-97d2-11ea-9695-97051c55091f.gif)
+- [](# "prevent-link-loss") [Suggests fixing links that are wrongly shortened by GitHub.](https://user-images.githubusercontent.com/1402241/82131169-93fd5180-97d2-11ea-9695-97051c55091f.gif)
 - [](# "align-repository-header") [Aligns the repository header to the repository content on wide screens.](https://user-images.githubusercontent.com/1402241/86574587-587f3800-bf76-11ea-9961-5c25cdb6e357.gif)
 - [](# "linkify-user-edit-history-popup") [Linkifies the username in the edit history popup.](https://user-images.githubusercontent.com/1402241/88917988-9ebb7480-d260-11ea-8690-0a3440f1ebbc.png)
 - [](# "prevent-duplicate-pr-submission") [Avoids creating duplicate PRs when mistakenly clicking "Create pull request" more than once.](https://user-images.githubusercontent.com/16872793/89589967-e029c200-d814-11ea-962b-3ff1f6236781.gif)
@@ -358,6 +389,7 @@ Thanks for contributing! 🦋🙌
 - [](# "linkify-full-profile-readme-title") [Linkifies the readme text on profile pages.](https://user-images.githubusercontent.com/16872793/90910173-ebe4bf00-e3a4-11ea-8fc5-aea3d1a2e5e5.png)
 - [](# "convert-pr-to-draft-improvements") [Moves the "Convert PR to Draft" button to the mergeability box and adds visual feedback to its confirm button.](https://user-images.githubusercontent.com/1402241/95644892-885f3f80-0a7f-11eb-8428-8e0fb0c8dfa5.gif)
 - [](# "clean-header-search-field") [Clears duplicate queries in the header search field.](https://user-images.githubusercontent.com/1402241/114177338-7c890300-9966-11eb-83a3-a711a76fae99.png)
+- [](# "cancel-wiki-edit-button") [Adds a cancel button when editing wiki pages.](https://user-images.githubusercontent.com/44045911/122222158-93a71c80-cee4-11eb-9a43-98457cac93df.png)
 
 <!-- Refer to style guide above. Keep this message between sections. -->
 

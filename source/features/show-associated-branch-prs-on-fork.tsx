@@ -10,13 +10,17 @@ import * as api from '../github-helpers/api';
 import {getRepo, upperCaseFirst} from '../github-helpers';
 
 interface PullRequest {
+	timelineItems: {
+		nodes: AnyObject;
+	};
 	number: number;
 	state: keyof typeof stateClass;
 	isDraft: boolean;
 	url: string;
 }
 
-const getPullRequestsAssociatedWithBranch = cache.function(async (): Promise<Record<string, PullRequest>> => {
+// eslint-disable-next-line import/prefer-default-export
+export const getPullRequestsAssociatedWithBranch = cache.function(async (): Promise<Record<string, PullRequest>> => {
 	const {repository} = await api.v4(`
 		repository() {
 			refs(refPrefix: "refs/heads/", last: 100) {
@@ -42,11 +46,11 @@ const getPullRequestsAssociatedWithBranch = cache.function(async (): Promise<Rec
 
 	const pullRequests: Record<string, PullRequest> = {};
 	for (const {name, associatedPullRequests} of repository.refs.nodes) {
-		const [prInfo] = associatedPullRequests.nodes;
+		const [prInfo] = associatedPullRequests.nodes as PullRequest[];
 		// Check if the ref was deleted, since the result includes pr's that are not in fact related to this branch but rather to the branch name.
 		const headRefWasDeleted = prInfo?.timelineItems.nodes[0]?.__typename === 'HeadRefDeletedEvent';
 		if (prInfo && !headRefWasDeleted) {
-			prInfo.state = prInfo.isDraft && prInfo.state === 'OPEN' ? 'Draft' : upperCaseFirst(prInfo.state);
+			prInfo.state = prInfo.isDraft && prInfo.state === 'OPEN' ? 'DRAFT' : prInfo.state;
 			pullRequests[name] = prInfo;
 		}
 	}
@@ -55,15 +59,15 @@ const getPullRequestsAssociatedWithBranch = cache.function(async (): Promise<Rec
 }, {
 	maxAge: {hours: 1},
 	staleWhileRevalidate: {days: 4},
-	cacheKey: () => 'associatedBranchPullRequests:' + getRepo()!.nameWithOwner
+	cacheKey: () => 'associatedBranchPullRequests:' + getRepo()!.nameWithOwner,
 });
 
 // TODO: Replace this with `State--${prInfo.state.toLowerCase()}` GHE #4202
 const stateClass = {
-	Open: 'State--green State--open',
-	Closed: 'State--red State--closed',
-	Merged: 'State--purple State--merged',
-	Draft: ''
+	OPEN: 'State--green State--open',
+	CLOSED: 'State--red State--closed',
+	MERGED: 'State--purple State--merged',
+	DRAFT: '',
 };
 
 async function init(): Promise<void> {
@@ -74,7 +78,7 @@ async function init(): Promise<void> {
 			const branchName = branchCompareLink.closest('[branch]')!.getAttribute('branch')!;
 			const prInfo = associatedPullRequests[branchName];
 			if (prInfo) {
-				const StateIcon = prInfo.state === 'Merged' ? GitMergeIcon : GitPullRequestIcon;
+				const StateIcon = prInfo.state === 'MERGED' ? GitMergeIcon : GitPullRequestIcon;
 
 				branchCompareLink.replaceWith(
 					<div className="d-inline-block text-right ml-3">
@@ -89,24 +93,24 @@ async function init(): Promise<void> {
 						</a>
 						<a
 							className={`State ${stateClass[prInfo.state]} State--small ml-1 no-underline`}
-							title={`Status: ${prInfo.state}`}
+							title={`Status: ${upperCaseFirst(prInfo.state)}`}
 							href={prInfo.url}
 						>
 							<StateIcon width={10} height={14}/> {prInfo.state}
 						</a>
 					</div>);
 			}
-		}
+		},
 	});
 }
 
 void features.add(__filebasename, {
 	include: [
-		pageDetect.isBranches
+		pageDetect.isBranches,
 	],
 	exclude: [
-		() => !pageDetect.isForkedRepo()
+		() => !pageDetect.isForkedRepo(),
 	],
 	awaitDomReady: false,
-	init: onetime(init)
+	init: onetime(init),
 });

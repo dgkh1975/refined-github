@@ -2,6 +2,7 @@ import './conflict-marker.css';
 import React from 'dom-chef';
 import select from 'select-dom';
 import {AlertIcon} from '@primer/octicons-react';
+import oneMutation from 'one-mutation';
 import * as pageDetect from 'github-url-detection';
 
 import features from '.';
@@ -37,11 +38,16 @@ function getPRConfig(prIcon: Element): PRConfig {
 		repo,
 		number,
 		link,
-		key: api.escapeKey(`${user}_${repo}_${number}`)
+		key: api.escapeKey(`${user}_${repo}_${number}`),
 	};
 }
 
 async function init(): Promise<false | void> {
+	// Milestone issues are lazy-loaded
+	if (pageDetect.isMilestone()) {
+		await oneMutation(select('.js-milestone-issues-container')!, {childList: true});
+	}
+
 	const openPrIcons = select.all('.js-issue-row .octicon-git-pull-request.open');
 	if (openPrIcons.length === 0) {
 		return false;
@@ -59,7 +65,7 @@ async function init(): Promise<false | void> {
 					href={`${pr.link.pathname}#partial-pull-merging`}
 				>
 					<AlertIcon/>
-				</a>
+				</a>,
 			);
 		}
 	}
@@ -67,7 +73,10 @@ async function init(): Promise<false | void> {
 
 void features.add(__filebasename, {
 	include: [
-		pageDetect.isConversationList
+		pageDetect.isConversationList,
 	],
-	init
+	exclude: [
+		() => select.exists('.blankslate'),
+	],
+	init,
 });

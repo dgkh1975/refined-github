@@ -1,6 +1,7 @@
 import React from 'dom-chef';
 import select from 'select-dom';
 import delegate from 'delegate-it';
+import elementReady from 'element-ready';
 import * as pageDetect from 'github-url-detection';
 
 import features from '.';
@@ -16,8 +17,8 @@ async function convertToDraft({delegateTarget: draftButton}: delegate.Event): Pr
 		await api.v3(release.url, {
 			method: 'PATCH',
 			body: {
-				draft: true
-			}
+				draft: true,
+			},
 		});
 
 		select('.BtnGroup a[href*="releases/edit"]')!.click(); // Visit "Edit release" page
@@ -30,7 +31,7 @@ async function convertToDraft({delegateTarget: draftButton}: delegate.Event): Pr
 async function init(): Promise<void | false> {
 	await api.expectToken();
 
-	const editButton = select('.BtnGroup a[href*="releases/edit"]');
+	const editButton = await elementReady('.BtnGroup a[href*="releases/edit"]');
 	if (!editButton || select.exists('.label-draft')) {
 		return false;
 	}
@@ -41,7 +42,8 @@ async function init(): Promise<void | false> {
 
 void features.add(__filebasename, {
 	include: [
-		pageDetect.isSingleTag
+		pageDetect.isSingleTag,
 	],
-	init
+	awaitDomReady: false,
+	init,
 });

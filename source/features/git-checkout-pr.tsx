@@ -1,6 +1,7 @@
 import React from 'dom-chef';
 import select from 'select-dom';
 import delegate from 'delegate-it';
+import oneMutation from 'one-mutation';
 import {ClippyIcon} from '@primer/octicons-react';
 import * as pageDetect from 'github-url-detection';
 
@@ -27,7 +28,7 @@ function getRemoteName(): string | undefined {
 
 const connectionType = {
 	HTTPS: location.origin + '/',
-	SSH: `git@${location.hostname}:`
+	SSH: `git@${location.hostname}:`,
 };
 
 function checkoutOption(remote?: string, remoteType?: 'HTTPS' | 'SSH'): JSX.Element {
@@ -63,8 +64,12 @@ function checkoutOption(remote?: string, remoteType?: 'HTTPS' | 'SSH'): JSX.Elem
 	);
 }
 
-function handleMenuOpening({delegateTarget: dropdown}: delegate.Event): void {
+async function handleMenuOpening({delegateTarget: dropdown}: delegate.Event): Promise<void> {
 	dropdown.classList.add('rgh-git-checkout'); // Mark this as processed
+	if (select.exists('.SelectMenu-loading', dropdown)) { // The dropdown may still be loading
+		await oneMutation(dropdown, {childList: true, subtree: true});
+	}
+
 	const tabContainer = select('[action="/users/checkout-preference"]', dropdown)!.closest<HTMLElement>('tab-container')!;
 	tabContainer.style.minWidth = '370px';
 	select('.UnderlineNav-body', tabContainer)!.append(
@@ -76,7 +81,7 @@ function handleMenuOpening({delegateTarget: dropdown}: delegate.Event): void {
 			className="UnderlineNav-item flex-1 btn-link"
 		>
 			Git Checkout
-		</button>
+		</button>,
 	);
 
 	const remoteName = getRemoteName();
@@ -87,9 +92,9 @@ function handleMenuOpening({delegateTarget: dropdown}: delegate.Event): void {
 			</p>
 			{remoteName ? [
 				checkoutOption(remoteName, 'HTTPS'),
-				checkoutOption(remoteName, 'SSH')
+				checkoutOption(remoteName, 'SSH'),
 			] : checkoutOption()}
-		</div>
+		</div>,
 	);
 }
 
@@ -100,10 +105,10 @@ function init(): void {
 
 void features.add(__filebasename, {
 	include: [
-		pageDetect.isPR
+		pageDetect.isPR,
 	],
 	exclude: [
-		pageDetect.isClosedPR
+		pageDetect.isClosedPR,
 	],
-	init
+	init,
 });

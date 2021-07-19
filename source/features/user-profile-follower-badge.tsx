@@ -11,34 +11,28 @@ import {getUsername, getCleanPathname} from '../github-helpers';
 const doesUserFollow = cache.function(async (userA: string, userB: string): Promise<boolean> => {
 	const {httpStatus} = await api.v3(`/users/${userA}/following/${userB}`, {
 		json: false,
-		ignoreHTTPStatus: true
+		ignoreHTTPStatus: true,
 	});
 
 	return httpStatus === 204;
 }, {
-	cacheKey: ([userA, userB]) => `user-follows:${userA}:${userB}`
+	cacheKey: ([userA, userB]) => `user-follows:${userA}:${userB}`,
 });
 
 async function init(): Promise<void> {
-	if (await doesUserFollow(getCleanPathname(), getUsername())) {
-		const newProfileElement = select('.js-profile-editable-area a:last-child');
-		if (newProfileElement) {
-			newProfileElement.after(<span className="text-gray color-text-secondary"> · Follows you</span>);
-		} else {
-			// Pre "Repository refresh" layout
-			select('.vcard-names-container:not(.is-placeholder)')!.after(
-				<div className="rgh-follower-badge">Follows you</div>
-			);
-		}
+	if (await doesUserFollow(getCleanPathname(), getUsername()!)) {
+		select('.js-profile-editable-area .octicon-star')!.closest('mb-3')!.append(
+			<span className="text-gray color-text-secondary"> · Follows you</span>,
+		);
 	}
 }
 
 void features.add(__filebasename, {
 	include: [
-		pageDetect.isUserProfile
+		pageDetect.isUserProfile,
 	],
 	exclude: [
-		pageDetect.isOwnUserProfile
+		pageDetect.isOwnUserProfile,
 	],
-	init
+	init,
 });

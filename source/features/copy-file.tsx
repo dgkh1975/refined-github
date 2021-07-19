@@ -25,7 +25,7 @@ function handleClick({delegateTarget: button}: delegate.Event): void {
 function renderButton(): void {
 	for (const button of select.all([
 		'.file-actions .btn[href*="/raw/"]', // `isGist`
-		'[data-hotkey="b"]'
+		'[data-hotkey="b"]',
 	])) {
 		const copyButton = (
 			<button
@@ -45,26 +45,19 @@ function renderButton(): void {
 	}
 }
 
-function removeButton(): void {
-	select('.rgh-copy-file')?.remove();
-}
-
 function init(): void {
 	delegate(document, '.rgh-copy-file', 'click', handleClick);
-
-	if (select.exists('.blob > .markdown-body')) {
-		delegate(document, '.rgh-md-source', 'rgh:view-markdown-source', renderButton);
-		delegate(document, '.rgh-md-source', 'rgh:view-markdown-rendered', removeButton);
-	} else {
-		renderButton();
-	}
+	renderButton();
 }
 
 void features.add(__filebasename, {
 	include: [
 		pageDetect.isSingleFile,
-		pageDetect.isGist
+		pageDetect.isGist,
+	],
+	exclude: [
+		() => !select.exists('table.highlight'), // Rendered page
 	],
 	deduplicate: '.rgh-copy-file', // #3945
-	init
+	init,
 });

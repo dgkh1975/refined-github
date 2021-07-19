@@ -20,7 +20,7 @@ async function removeLabelButtonClickHandler(event: delegate.Event<MouseEvent, H
 
 	removeLabelButton.disabled = true;
 	await api.v3(`issues/${getConversationNumber()!}/labels/${removeLabelButton.dataset.name!}`, {
-		method: 'DELETE'
+		method: 'DELETE',
 	});
 
 	removeLabelButton.closest('a')!.remove();
@@ -47,14 +47,11 @@ async function init(): Promise<void> {
 					aria-label="Remove this label"
 					className="btn-link tooltipped tooltipped-nw rgh-remove-label-faster"
 					data-name={label.dataset.name}
-					style={{
-						'--rgh-remove-label-faster-color': label.style.backgroundColor
-					} as React.CSSProperties}
 				>
 					<XIcon/>
-				</button>
+				</button>,
 			);
-		}
+		},
 	});
 
 	delegate(document, '.rgh-remove-label-faster:not([disabled])', 'click', removeLabelButtonClickHandler);
@@ -62,10 +59,11 @@ async function init(): Promise<void> {
 
 void features.add(__filebasename, {
 	include: [
-		pageDetect.isConversation
+		pageDetect.isConversation,
 	],
 	exclude: [
-		canNotEditLabels
+		canNotEditLabels,
 	],
-	init: onetime(init)
+	deduplicate: 'has-rgh-inner',
+	init: onetime(init),
 });
