@@ -1,6 +1,4 @@
-/* Truncate hidden comment preview text with ellipsis */
-.rgh-preview-hidden-comments :is(.discussion-item-copy, .timeline-comment-header-text) {
-	overflow: hidden;
-	white-space: nowrap;
-	text-overflow: ellipsis;
+/* Avoid overflow on mobile due to change of flex-direction #5750 */
+.rgh-preview-hidden-comments h3 {
+	max-width: 100%;
 }

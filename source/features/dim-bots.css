@@ -1,40 +1,60 @@
-/*
-READ BEFORE EDITING. Some selectors match the same items ("focused" selector vs non-focused); make sure to update them in tandem.
-Commits that have a long commit message will not be dimmed after the user uncollapses the `<details>` element.
-*/
+.rgh-dim-bots {
+	> *,
+	.Box-row--drag-hide {
+		transition: 100ms opacity; /* Match `mark-merge-commits-in-list` */
+	}
 
-.rgh-dim-bot:not(.rgh-tagged) .mb-1,
-.rgh-dim-bot:not(.rgh-tagged) .mb-1 ~ .d-flex,
-.rgh-dim-bot:not(.rgh-tagged) > .d-md-block,
-.rgh-dim-bot:not(.rgh-tagged) .Box-row--drag-hide, /* PR row */
-.rgh-dim-bot:not(.rgh-tagged) .labels, /* PR labels */
-.rgh-dim-bot:not(.rgh-tagged) .text-small.color-text-secondary /* PR meta */ {
-	/* Delay the "focused" status so it's not too annoying when moving the mouse over a list of dimmed items. */
-	transition: 0.1s;
-	transition-delay: 0.3s;
-	transition-property: opacity, margin-bottom;
+	/* Commit titles, dim */
+	&:not(.rgh-tagged, :hover) > *,
+	&:not(.rgh-tagged, :hover) h3,
+	/* PR row, dim */
+	&:not(.rgh-tagged, :hover) .Box-row--drag-hide {
+		opacity: 50%; /* Match `mark-merge-commits-in-list` */
+	}
+
+	&:not(.rgh-tagged, .rgh-interacted) {
+		/* React issue/PR lists: drop the empty second row (`main-content`) */
+		&:not([data-testid='commit-row-item']) {
+			grid-template-areas:
+				'selection status primary metadata actions' !important;
+		}
+
+		/* Reset commit title spacing */
+		.min-width-0 .mb-1 {
+			margin-bottom: 0 !important;
+		}
+
+		.mb-1 ~ * /* Commit metadata */,
+		.dropdown-signed-commit /* Commit verified label */,
+		.flex-shrink-0 .BtnGroup /* Commit buttons on side */,
+		.min-width-0 > :is(.d-block, .d-flex) /* PR */ {
+			display: none !important;
+		}
+
+		/* React PR/issue lists: labels, like the legacy `.d-block` labels */
+		[data-listview-item-title-container] > [class*='trailingBadges'] {
+			display: none !important;
+		}
+
+		/* React PR/issue lists: author and dates, comments count */
+		> div:has(
+			[data-testid='timestamp-container'],
+			[data-testid='updated-at'],
+			.octicon-comment
+		) {
+			display: none !important;
+		}
+	}
 }
 
-/*
-ALL the following rules define the non-focused state
-*/
-
-.rgh-dim-bot:not(.rgh-tagged, .navigation-focus, .Details--on) .mb-1, /* Commit titles, dim */
-.rgh-dim-bot:not(.rgh-tagged, .navigation-focus) .Box-row--drag-hide { /* PR row, dim */
-	opacity: 20%;
-	transition-delay: 0s;
-}
-
-.rgh-dim-bot:not(.rgh-tagged, .navigation-focus, .Details--on) .mb-1 ~ .d-flex,
-.rgh-dim-bot:not(.rgh-tagged, .navigation-focus, .Details--on) > .d-md-block {
-	opacity: 0%;
-	margin-bottom: -1.6em;
-	transition-delay: 0s;
-}
-
-.rgh-dim-bot:not(.rgh-tagged, .navigation-focus) .labels, /* PR labels */
-.rgh-dim-bot:not(.rgh-tagged, .navigation-focus) .text-small.color-text-secondary /* PR meta */ {
-	opacity: 0%;
-	margin-bottom: -2em;
-	transition-delay: 0s;
+/* Keep the spacing that `align-issue-labels` gives to a title without labels */
+html:not([rgh-OFF-align-issue-labels])
+	.rgh-dim-bots:not(
+		.rgh-tagged,
+		.rgh-interacted,
+		[data-testid='commit-row-item']
+	)
+	[data-listview-item-title-container]
+	> [class*='heading'] {
+	padding-bottom: 5px !important;
 }

@@ -1,11 +1,16 @@
-import select from 'select-dom';
 import delegate from 'delegate-it';
+import elementReady from 'element-ready';
 import * as pageDetect from 'github-url-detection';
+import {$optional} from 'select-dom';
 
-import features from '.';
+import features from '../feature-manager.js';
 
 function jumpToFirstNonViewed(): void {
-	const firstNonViewedFile = select('.file:not([data-file-user-viewed])')!;
+	const firstNonViewedFile = $optional([
+		// TODO [2027-01-01]: Old PR Files view, drop
+		'[id][data-details-container-group="file"]:not([data-file-user-viewed])',
+		'[id][class*="diffTargetable"]:has(button[aria-pressed="false"])',
+	]);
 	if (firstNonViewedFile) {
 		// Scroll to file without pushing to history
 		location.replace('#' + firstNonViewedFile.id);
@@ -15,18 +20,33 @@ function jumpToFirstNonViewed(): void {
 	}
 }
 
-function init(): void {
-	delegate(document, '.diffbar-item progress-bar', 'click', jumpToFirstNonViewed);
-	select('.diffbar-item progress-bar')!.style.cursor = 'pointer';
+const selectors = [
+	// TODO [2027-01-01]: Old PR Files view, drop
+	'.diffbar-item progress-bar',
+	'.d-flex:has([class*="ProgressContainer"])',
+];
+async function init(signal: AbortSignal): Promise<void> {
+	const bar = await elementReady(selectors);
+	bar!.style.cursor = 'pointer';
+	delegate(selectors, 'click', jumpToFirstNonViewed, {signal});
 }
 
-void features.add(__filebasename, {
+void features.add(import.meta.url, {
 	include: [
 		pageDetect.isPRFiles,
 	],
 	exclude: [
 		pageDetect.isPRFile404,
+		pageDetect.isPRCommit,
 	],
-	deduplicate: 'has-rgh-inner',
 	init,
 });
+
+/*
+
+Test URLs:
+
+PR: https://github.com/refined-github/sandbox/pull/55/files
+Large PR https://togithub.com/pixiebrix/pixiebrix-extension/pull/6808/files
+
+*/

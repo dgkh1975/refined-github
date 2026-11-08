@@ -1,0 +1,32 @@
+import cx from 'clsx';
+import React from 'dom-chef';
+import elementReady from 'element-ready';
+import XIcon from 'octicons-plain-react/X';
+
+type Options = {
+	action?: Element | false;
+	type?: 'success' | 'notice' | 'warn' | 'error';
+};
+
+/** https://primer.style/css/components/alerts */
+export default async function addNotice(
+	message: string | Node | Array<string | Node>,
+	{
+		type = 'notice',
+		action = (
+			<button className="flash-close js-flash-close" type="button" aria-label="Dismiss this message">
+				<XIcon />
+			</button>
+		),
+	}: Options = {},
+): Promise<void> {
+	const container = await elementReady('#js-flash-container');
+	container!.append(
+		<div className={cx('flash flash-full', `flash-${type}`, 'px-4 tmp-px-3')}>
+			{action}
+			<div>
+				{message}
+			</div>
+		</div>,
+	);
+}

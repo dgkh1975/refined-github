@@ -1,47 +1,60 @@
 import './cross-deleted-pr-branches.css';
-import React from 'dom-chef';
-import select from 'select-dom';
+
 import * as pageDetect from 'github-url-detection';
+import {$$, closestElement, lastElementOptional} from 'select-dom';
 
-import {wrap} from '../helpers/dom-utils';
-import features from '.';
+import features from '../feature-manager.js';
 
-function init(): void | false {
-	const lastBranchAction = select.last('.TimelineItem-body .user-select-contain.commit-ref');
+function markDeletedBranch(element: HTMLElement): void {
+	element.title = 'This branch has been deleted';
+	element.classList.add('rgh-deleted-branch');
+}
 
-	const headReferenceLink = select('.head-ref a');
-	if (!headReferenceLink && !lastBranchAction) {
-		return; // Don't return false, This feature’s CSS already takes care of this
-	}
+function wasBranchDeleted(): boolean {
+	const lastBranchEvent = lastElementOptional('.TimelineItem-body .user-select-contain.commit-ref');
+	return Boolean(lastBranchEvent) // No branch events at all
+		&& closestElement('.TimelineItem-body', lastBranchEvent).textContent.includes(' deleted ');
+}
 
-	if (!lastBranchAction?.closest('.TimelineItem-body')!.textContent!.includes(' deleted ')) {
-		return false;
-	}
+function parseBranchName(element: HTMLElement): string {
+	return element.textContent.trim().split(':').pop()!;
+}
 
-	const deletedBranchName = lastBranchAction.textContent!.trim();
-	const repoRootUrl = headReferenceLink?.href.split('/', 5).join('/');
-	for (const element of select.all('.commit-ref')) {
-		const branchName = element.textContent!.trim();
-		if (branchName === deletedBranchName) {
-			element.title = 'This branch has been deleted';
+function init(): void {
+	// There's static and sticky headers
+	const [header1, header2] = $$('a:has(~ [aria-label="Copy head branch name to clipboard"])');
+	markDeletedBranch(header1);
+	markDeletedBranch(header2);
 
-			if (!headReferenceLink) {
-				continue;
-			}
-
-			if (element.classList.contains('head-ref')) {
-				select('a', element)!.href = repoRootUrl!;
-			} else {
-				wrap(element, <a href={repoRootUrl}/>);
-			}
+	const deletedBranchName = parseBranchName(header1);
+	for (const element of $$('.commit-ref')) {
+		// The selector might also match the base branch in "PR was rebased" events
+		if (parseBranchName(element) === deletedBranchName) {
+			markDeletedBranch(element);
 		}
 	}
 }
 
-void features.add(__filebasename, {
-	include: [
+void features.add(import.meta.url, {
+	asLongAs: [
 		pageDetect.isPRConversation,
+		wasBranchDeleted,
 	],
+	awaitDomReady: true, // Must wait for the last one
 	deduplicate: 'has-rgh-inner',
 	init,
 });
+
+/*
+
+Test URLs:
+
+- 🔗 never deleted: https://github.com/refined-github/sandbox/pull/148
+- ✏️ deleted: https://github.com/refined-github/sandbox/pull/146
+- ✏️ deleted (from fork): https://github.com/refined-github/sandbox/pull/149
+- 🔗 deleted and restored: https://github.com/refined-github/sandbox/pull/147
+- 🔗 deleted and restored (on fork): https://github.com/refined-github/sandbox/pull/150
+- 🔗 deleted and repo deleted: https://github.com/refined-github/refined-github/pull/3227
+- 🔗 forks that are deleted before deleting the branch are not detectable sometimes
+
+*/

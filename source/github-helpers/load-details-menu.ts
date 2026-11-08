@@ -1,8 +1,8 @@
-import select from 'select-dom';
 import oneEvent from 'one-event';
+import {$optional} from 'select-dom';
 
 export default async function loadDetailsMenu(detailsMenu: HTMLElement): Promise<void> {
-	const fragment = select('include-fragment.SelectMenu-loading', detailsMenu);
+	const fragment = $optional('.js-comment-header-actions-deferred-include-fragment', detailsMenu);
 	if (!fragment) {
 		return;
 	}

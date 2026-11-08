@@ -1,33 +1,34 @@
-import select from 'select-dom';
 import * as pageDetect from 'github-url-detection';
 
-import features from '.';
+import features from '../feature-manager.js';
+import {registerHotkey} from '../github-helpers/hotkey.js';
+import {buildRepoUrl} from '../github-helpers/index.js';
 
-function addQuickSubmit(): void {
-	select('textarea[aria-label="Describe this release"]')?.classList.add('js-quick-submit');
+function init(signal: AbortSignal): void {
+	// Reasoning for this feature: #1254
+	registerHotkey('c', buildRepoUrl('releases/new'), {signal});
 }
 
-function init(): void {
-	const createReleaseButton = select('a[href$="/releases/new"]:not([data-hotkey])');
-	if (createReleaseButton) {
-		createReleaseButton.dataset.hotkey = 'c';
-	}
-}
-
-void features.add(__filebasename, {
+void features.add(import.meta.url, {
 	shortcuts: {
 		c: 'Create a new release',
-		'ctrl enter': 'Publish a release',
 	},
 	include: [
 		pageDetect.isReleasesOrTags,
 	],
-	init,
-}, {
-	include: [
-		pageDetect.isReleasesOrTags, // If the release couldn't be published, GitHub changes the url to /releases while still being on the "New release" page
+	exclude: [
 		pageDetect.isNewRelease,
 		pageDetect.isEditingRelease,
 	],
-	init: addQuickSubmit,
+	init,
 });
+
+/*
+
+Test URLs
+
+https://github.com/refined-github/refined-github/releases
+https://github.com/refined-github/sandbox/releases/new
+https://github.com/refined-github/sandbox/releases/tag/cool
+
+*/

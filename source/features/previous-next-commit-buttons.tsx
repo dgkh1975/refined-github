@@ -1,25 +1,40 @@
-import select from 'select-dom';
+import React from 'dom-chef';
 import * as pageDetect from 'github-url-detection';
+import {$, $optional} from 'select-dom';
 
-import features from '.';
+import features from '../feature-manager.js';
 
 function init(): false | void {
-	const originalPreviousNext = select('.commit .BtnGroup.float-right');
+	const originalPreviousNext = $optional('.commit .float-right.ButtonGroup') // Legacy
+		?? $optional('[class^="prc-ButtonGroup-ButtonGroup"]:has(a[aria-label$="previous commit" i])');
 	if (!originalPreviousNext) {
 		return false;
 	}
 
-	const previousNext = originalPreviousNext.cloneNode(true);
-	const files = select('#files')!;
-
-	files.after(previousNext);
+	// Wrap the button in a <div> to avoid #4503
+	$([
+		'#files', // Legacy
+		'[class*="DiffPlaceholderSVG"]',
+	]).after(
+		<div className="d-flex flex-justify-end mb-3 tmp-mb-3">
+			{originalPreviousNext.cloneNode(true)}
+		</div>,
+	);
 }
 
-void features.add(__filebasename, {
+void features.add(import.meta.url, {
 	include: [
-		pageDetect.isPRFiles,
 		pageDetect.isPRCommit,
 	],
+	awaitDomReady: true,
 	deduplicate: 'has-rgh-inner',
 	init,
 });
+
+/*
+Test URLs:
+
+Condensed commit: https://github.com/refined-github/refined-github/pull/4448/commits/0b8966c918eae11da9fc992368741757088edf08
+Regular commit: https://github.com/refined-github/refined-github/pull/5113/commits/5b7282afc40b013f5928271fb6740cf70b4e4295
+
+*/

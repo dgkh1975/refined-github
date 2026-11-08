@@ -1,42 +1,98 @@
 import './suggest-commit-title-limit.css';
-import select from 'select-dom';
-import delegate from 'delegate-it';
+
+import delegate, {type DelegateEvent} from 'delegate-it';
 import * as pageDetect from 'github-url-detection';
 
-import features from '.';
-import onPrMergePanelOpen from '../github-events/on-pr-merge-panel-open';
+import features from '../feature-manager.js';
+import onCommitTitleUpdate, {commitTitleFieldSelector} from '../github-events/on-commit-title-update.js';
+import waitForPrMerge from '../github-events/on-pr-merge.js';
+import getNextConversationNumber from '../github-helpers/get-next-conversation-number.js';
+import {getConversationNumber} from '../github-helpers/index.js';
+import abortableClassName from '../helpers/abortable-classname.js';
+import observe from '../helpers/selector-observer.js';
+import {formatPrCommitTitle} from './sync-pr-commit-title.js';
 
-const fieldSelector = [
-	'#commit-summary-input', // Commit title on edit file page
-	'#merge_title_field', // PR merge message field
-].join(',');
+// https://github.com/refined-github/refined-github/issues/2178#issuecomment-505940703
+const limit = 72;
 
-function validateInput(): void {
-	const inputField = select<HTMLInputElement>(fieldSelector)!;
-	inputField.classList.toggle('rgh-title-over-limit', inputField.value.length > 72);
+function validateCommitTitle(field: HTMLInputElement): void {
+	field.classList.toggle('rgh-title-over-limit', field.value.length > limit);
 }
 
-function init(): void {
-	delegate(document, fieldSelector, 'input', validateInput);
+function validateCommitTitleDelegate({delegateTarget}: DelegateEvent<Event, HTMLInputElement>): void {
+	validateCommitTitle(delegateTarget);
 }
 
-void features.add(__filebasename, {
+async function validatePrTitle(field: HTMLInputElement): Promise<void> {
+	// Include the PR number in the title length calculation because it will be added to the commit title
+	const prTitle = formatPrCommitTitle(
+		field.value,
+		getConversationNumber() ?? await getNextConversationNumber(),
+	);
+	field.classList.toggle('rgh-title-over-limit', prTitle.length > limit);
+}
+
+async function validatePrTitleDelegate({delegateTarget}: DelegateEvent<Event, HTMLInputElement>): Promise<void> {
+	await validatePrTitle(delegateTarget);
+}
+
+const currentPrTitleSelectors = [
+	'[class^="prc-PageLayout-Header"] input', // `isPR`
+	'input[name="pull_request[title]"]', // `isCompare`
+] as const;
+
+async function init(signal: AbortSignal): Promise<void> {
+	abortableClassName(document.body, signal, 'rgh-suggest-commit-title-limit');
+
+	onCommitTitleUpdate(validateCommitTitleDelegate, signal);
+	// The field is prefilled when it's added to the DOM, so there's no `input` event to react to
+	observe(commitTitleFieldSelector, validateCommitTitle, {signal});
+
+	delegate(
+		currentPrTitleSelectors,
+		'input',
+		validatePrTitleDelegate,
+		{signal, passive: true},
+	);
+	// `isPR` - input is added to the DOM when user enters editing mode and removed when they exit it
+	// `isCompare` - input is re-rendered when previously entered title is restored
+	observe(currentPrTitleSelectors, validatePrTitle, {signal});
+
+	await waitForPrMerge(signal);
+	features.unload(import.meta.url);
+}
+
+void features.add(import.meta.url, {
 	include: [
 		pageDetect.isEditingFile,
-		pageDetect.isPRConversation,
+		pageDetect.isCompare,
+		pageDetect.isPR,
 	],
-	deduplicate: 'has-rgh-inner',
+	exclude: [
+		// No need here https://github.com/refined-github/refined-github/issues/7922
+		pageDetect.isMergedPR,
+	],
+	// DOM-based checks; event-based feature
+	awaitDomReady: true,
 	init,
-}, {
-	include: [
-		pageDetect.isPRConversation,
-	],
-	additionalListeners: [
-		// For PR merges, GitHub restores any saved commit messages on page load
-		// Triggering input event for these fields immediately validates the form
-		onPrMergePanelOpen,
-	],
-	onlyAdditionalListeners: true,
-	deduplicate: 'has-rgh-inner',
-	init: validateInput,
 });
+
+/*
+
+# Test data
+
+## Commit title
+
+123456789 123456789 123456789 123456789 123456789 123456789 123456789 123
+
+## Test URLs
+
+- Any mergeable PR
+	- https://github.com/refined-github/sandbox/pull/169
+- Any editable file
+	- Markown: https://github.com/refined-github/refined-github/edit/main/readme.md
+	- Workflow: https://github.com/refined-github/refined-github/edit/fix-commit-title-limit/.github/workflows/features.yml
+- Compare page
+	- https://github.com/refined-github/sandbox/compare/default-a...fregante-patch-2?expand=1
+
+*/

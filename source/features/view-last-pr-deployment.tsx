@@ -1,41 +1,50 @@
 import React from 'dom-chef';
-import select from 'select-dom';
 import * as pageDetect from 'github-url-detection';
-import {LinkExternalIcon} from '@primer/octicons-react';
+import RocketIcon from 'octicons-plain-react/Rocket';
+import {lastElementOptional} from 'select-dom';
 
-import features from '.';
-import onConversationHeaderUpdate from '../github-events/on-conversation-header-update';
+import {withTooltipRef} from '../components/tooltip.js';
+import features from '../feature-manager.js';
+import observe from '../helpers/selector-observer.js';
 
-const deploymentSelector = '.js-timeline-item [data-url$="deployed"] .TimelineItem-body .btn[target="_blank"]';
-
-function init(): void {
-	if (select.exists('.rgh-last-deployment')) {
+function addLink(header: HTMLElement): void {
+	const lastDeployment = lastElementOptional('.js-timeline-item a[title="Deployment has completed"]');
+	if (!lastDeployment) {
 		return;
 	}
 
-	const {href} = select.last<HTMLAnchorElement>(deploymentSelector)!;
-	select('.gh-header-actions')!.prepend(
+	// Use "parentElement" because open PRs have a "PR status" button before the "Code" button
+	header.parentElement!.prepend(
 		<a
-			className="rgh-last-deployment btn btn-sm d-none d-md-block mr-1"
-			href={href}
-			target="_blank"
-			rel="noreferrer"
+			ref={withTooltipRef('View last deployment')}
+			className="rgh-last-deployment btn d-none d-md-block"
+			target="_blank" // Matches GitHub’s own behavior
+			rel="noopener noreferrer"
+			href={lastDeployment.href}
 		>
-			<LinkExternalIcon className="mr-1"/> View deployment
+			<RocketIcon />
 		</a>,
 	);
 }
 
-void features.add(__filebasename, {
-	asLongAs: [
-		() => select.exists(deploymentSelector),
-	],
+function init(signal: AbortSignal): void {
+	observe(
+		'button[class*="PullRequestCodeButton"]',
+		addLink,
+		{signal},
+	);
+}
+
+void features.add(import.meta.url, {
 	include: [
 		pageDetect.isPRConversation,
 	],
-	additionalListeners: [
-		onConversationHeaderUpdate,
-	],
-	deduplicate: 'has-rgh-inner',
+	awaitDomReady: true, // Must select last item on the page
 	init,
 });
+
+/*
+Test URLs:
+- All inactive: https://togithub.com/btkostner/btkostner.io/pull/10
+- Some active: https://github.com/fregante/bundle/pull/6
+*/

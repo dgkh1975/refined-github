@@ -1,26 +1,76 @@
-/* Move labels in the Issue/PR list below the title */
-.rgh-align-issue-labels .js-issue-row .min-width-0 {
-	display: flex;
-	flex-wrap: wrap;
-}
+html:not([rgh-OFF-align-issue-labels]) {
+	div[class*='row__'],
+	ul[class*='withMetadata'] > li[class*='listItem']:not([class*='compact']) {
+		/* Only rows with labels, so the org repositories list is left alone */
+		&:has(button[aria-label^='Filter by label']) {
+			div[class*='container']:has(> [class*='heading']) {
+				display: contents;
 
-.rgh-align-issue-labels .js-issue-row .labels {
-	order: 1;
-}
+				> [class*='heading'] {
+					grid-area: primary;
+					padding-top: 8px;
+				}
+				> span[class*='trailingBadgesSpacer'] {
+					display: none;
+				}
+				> span[class*='trailingBadgesContainer'] {
+					grid-area: -1 / main-content;
+					padding-bottom: 10px;
+					&:empty {
+						/* Grid gap adds additional 4px */
+						padding-bottom: 6px;
+					}
+					&:is(li[class*='listItem'][class*=' listItem'] *) {
+						/* Height of the main content row provides more than enough spacing */
+						/* 4px added by grid gap are extra */
+						margin-top: -4px;
+					}
+				}
+			}
 
-.rgh-align-issue-labels .js-issue-row .d-inline-block.mr-1 { /* Build status */
-	margin-left: 4px;
-}
+			div[class*='metadataContainer']:is(
+				li[class*='listItem'][class*=' listItem'] *
+			) {
+				padding-top: 8px;
+			}
 
-.rgh-align-issue-labels .js-issue-row .mt-1.text-small.color-text-secondary { /* Issue details line */
-	flex-basis: 100%;
-}
+			> div[class*='container'] > div[class*='inner'] {
+				padding-bottom: 0;
+			}
+		}
+	}
 
-.rgh-align-issue-labels .js-issue-row .h4 { /* Title */
-	max-width: 100%; /* #1518 */
-}
+	/* Old view - TODO: Drop after legacy PR lists are removed */
+	.js-issue-row {
+		/* Move labels in the Issue/PR list below the title */
+		.min-width-0 {
+			display: flex;
+			flex-wrap: wrap;
 
-.rgh-align-issue-labels .js-issue-row .IssueLabel {
-	margin-top: 4px;
-	font-size: 11px !important;
+			/* Labels */
+			> .lh-default {
+				order: 1;
+			}
+		}
+
+		/* Build status */
+		.commit-build-statuses {
+			margin-left: 4px;
+		}
+
+		/* Issue details line */
+		.mt-1.text-small.color-fg-muted {
+			flex-basis: 100%;
+		}
+
+		/* Title */
+		.h4 {
+			max-width: 100%; /* #1518 */
+		}
+
+		.IssueLabel {
+			margin-top: 4px;
+			font-size: 11px !important;
+		}
+	}
 }

@@ -1,69 +1,125 @@
-import React from 'dom-chef';
-import select from 'select-dom';
 import delegate from 'delegate-it';
-import domLoaded from 'dom-loaded';
+import React from 'dom-chef';
 import * as pageDetect from 'github-url-detection';
+import {$, elementExists} from 'select-dom';
 
-import features from '.';
-import * as api from '../github-helpers/api';
+import {overrideTab} from '../components/extensible-nav-store.js';
+import features from '../feature-manager.js';
+import api from '../github-helpers/api.js';
+import onetime from '../helpers/onetime.js';
+import observe from '../helpers/selector-observer.js';
 
-async function disableWikiAndProjects(): Promise<void> {
+const documentation =
+	'https://github.com/refined-github/refined-github/wiki/Extended-feature-descriptions#new-repo-disable-projects-and-wikis';
+
+async function disableWikiAndProjectsOnce(): Promise<void> {
 	delete sessionStorage.rghNewRepo;
 
 	await api.v3('', {
 		method: 'PATCH',
 		body: {
+			/* eslint-disable @typescript-eslint/naming-convention -- External API */
 			has_projects: false,
 			has_wiki: false,
+			/* eslint-enable @typescript-eslint/naming-convention */
 		},
 	});
-	await domLoaded;
-	select('[data-content="Wiki"]')?.closest('.d-flex')!.remove();
-	select('[data-menu-item="wiki-tab"]')?.remove();
-	select('[data-content="Projects"]')?.closest('.d-flex')!.remove();
-	select('[data-menu-item="projects-tab"]')?.remove();
+
+	overrideTab('wiki', {removed: true});
+	overrideTab('projects', {removed: true});
 }
 
 function setStorage(): void {
-	if (select('input#rgh-disable-project')!.checked) {
+	if ($('input#rgh-disable-project').checked) {
 		sessionStorage.rghNewRepo = true;
 	}
 }
 
-async function init(): Promise<void> {
-	await api.expectToken();
+function add(blueprintRow: HTMLElement): void {
+	const disableProjectsAndWikis = blueprintRow.cloneNode(true);
 
-	select.last([
-		'.js-repo-init-setting-container', // IsNewRepo
-		'.form-checkbox', // IsNewRepoTemplate
-	])!.after(
-		<div className="form-checkbox checked mt-0 mb-3">
-			<label>
-				<input
-					checked
-					type="checkbox"
-					id="rgh-disable-project"
-				/> Disable Projects and Wikis
-			</label>
-			<span className="note mb-2">
-				After creating the repository disable the projects and wiki.
-			</span>
-		</div>,
+	disableProjectsAndWikis.classList.add('flash-warn');
+
+	const title = $('.titleBox h3', disableProjectsAndWikis);
+	title.textContent = 'Disable Projects and Wikis';
+
+	const description = $('.descriptionBox p', disableProjectsAndWikis);
+	description.replaceChildren(
+		'After creating the repository disable the projects and wiki. ',
+		<a href={documentation} target="_blank" rel="noreferrer">Suggestion by Refined GitHub.</a>,
 	);
 
-	delegate(document, '#new_repository, #new_new_repository', 'submit', setStorage);
+	const control = $('.blockControl', disableProjectsAndWikis);
+	control.replaceChildren(
+		// Padding/margin classes added to increate hit area
+		<label className="d-flex gap-1 flex-items-center p-2 tmp-p-2 mr-n2 tmp-mr-n2">
+			<input
+				checked
+				// @ts-expect-error Safari only
+				switch
+				type="checkbox"
+				id="rgh-disable-project"
+			/>
+		</label>,
+	);
+	control.classList.add('d-flex', 'flex-items-center');
+
+	blueprintRow.parentElement!.append(disableProjectsAndWikis);
 }
 
-void features.add(__filebasename, {
+function addOld(submitButton: HTMLElement): void {
+	// .github repos have a banner that matches this #8716
+	if (elementExists('[data-testid="special-repo-name-banner"]')) {
+		return;
+	}
+
+	submitButton.classList.add('mt-0'); // Normalize it. /new has margin, /:user/:repo/fork does not
+	submitButton.parentElement!.before(
+		<div className="flash flash-warn py-0 tmp-py-0 ml-n3 tmp-ml-n3 my-4 tmp-my-3">
+			<div className="form-checkbox checked">
+				<label>
+					<input
+						checked
+						type="checkbox"
+						id="rgh-disable-project"
+					/>{' '}
+					Disable Projects and Wikis
+				</label>
+				<span className="note mb-2 tmp-mb-2">
+					After creating the repository disable the projects and wiki.{' '}
+					<a href={documentation} target="_blank" rel="noreferrer">Suggestion by Refined GitHub.</a>
+				</span>
+			</div>
+		</div>,
+	);
+}
+
+async function init(signal: AbortSignal): Promise<void> {
+	observe('[class^="ControlGroupContainer"]:has(#visibility-anchor-button)', add, {signal});
+	observe('form:has(.octicon-info) [type=submit]', addOld, {signal});
+	delegate('form', 'submit', setStorage, {signal, capture: true});
+}
+
+void features.add(import.meta.url, {
 	include: [
 		pageDetect.isNewRepo,
 		pageDetect.isNewRepoTemplate,
+		pageDetect.isForkingRepo,
 	],
+	requiresToken: true,
 	init,
 }, {
 	include: [
 		() => Boolean(sessionStorage.rghNewRepo),
 	],
-	awaitDomReady: false,
-	init: disableWikiAndProjects,
+	init: onetime(disableWikiAndProjectsOnce),
 });
+
+/*
+
+Test URLs:
+
+https://github.com/new
+https://github.com/new?template_name=browser-extension-template&template_owner=fregante
+
+*/

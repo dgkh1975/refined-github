@@ -1,20 +1,15 @@
-body > .footer {
-	transition: opacity 0.2s ease;
+.footer > .d-flex {
+	transition: opacity 0.2s;
+	margin: auto;
+	&:not(:hover) {
+		opacity: 30%;
+	}
 }
 
-body > .footer:not(:hover) {
-	opacity: 30%;
-}
+/*
 
-body > .footer > div > ul:first-of-type li:first-of-type { /* The `© 2017 GitHub, Inc.` text */
-	display: none;
-}
+Test URL:
 
-.footer-octicon {
-	display: none !important;
-}
+https://github.com/refined-github/refined-github
 
-body > .footer li a,
-body > .footer li .btn-link {
-	color: var(--color-text-disabled, #666);
-}
+*/

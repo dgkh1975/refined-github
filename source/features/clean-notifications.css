@@ -1,17 +1,34 @@
-/* Place conversation number before the title */
-.js-notifications-group [id^='notification'] {
-	flex-direction: row !important;
+@media (width >= 768px) {
+	.js-notifications-group [id^='notification'] {
+		/* Place conversation number before the title */
+		display: block !important;
+
+		> *,
+		> * > *:not(.d-md-none) {
+			/* .d-md-none is the mobile-only time */
+			display: contents !important;
+		}
+
+		/* Hide duplicate repository URL */
+		> .d-flex > .f6 {
+			font-size: 0 !important;
+
+			/* Restore conversation number and keep size constant */
+			> span {
+				font-size: 12px;
+				font-variant-numeric: tabular-nums;
+				&::after {
+					content: ' • ';
+				}
+			}
+		}
+	}
 }
-/* Hide duplicate repository URL */
-.js-notifications-group [id^='notification'] > .d-flex > .f6 {
-	font-size: 0 !important;
-}
-/* Size and position the conversation number */
-.js-notifications-group [id^='notification'] > .d-flex > .f6 > span {
-	display: block;
-	font-size: 12px;
-	font-variant-numeric: tabular-nums;
-	margin-top: 2px; /* Align baseline with conversation title */
-	margin-right: 8px;
-	word-break: keep-all;
-}
+
+/*
+
+Test URLs:
+
+https://github.com/notifications
+
+*/

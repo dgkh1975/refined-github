@@ -1,47 +1,64 @@
 import './warning-for-disallow-edits.css';
+
 import React from 'dom-chef';
-import select from 'select-dom';
-import onetime from 'onetime';
-import delegate from 'delegate-it';
 import * as pageDetect from 'github-url-detection';
+import {$optional, closestElement} from 'select-dom';
 
-import features from '.';
+import features from '../feature-manager.js';
+import attachElement from '../helpers/attach-element.js';
 
-const getWarning = onetime(() => (
-	<div className="flash flash-error mt-3 rgh-warning-for-disallow-edits">
-		<strong>Note:</strong> Maintainers may require changes. It’s easier and faster to allow them to make direct changes before merging.
+const getWarning = (): React.JSX.Element => (
+	<div className="flash flex-auto flash-error my-3 tmp-my-3 rgh-warning-for-disallow-edits">
+		<strong>Note:</strong>{' '}
+		Maintainers may require changes. It&apos;s easier and faster to allow them to make direct changes before merging.
 	</div>
-));
-
-function update(checkbox: HTMLInputElement): void {
-	if (checkbox.checked) {
-		getWarning().remove();
-	} else {
-		checkbox
-			.closest('.timeline-comment, .discussion-sidebar-item > .d-inline-flex')!
-			.after(getWarning());
-	}
-}
-
-function toggleHandler(event: delegate.Event<Event, HTMLInputElement>): void {
-	update(event.delegateTarget);
-}
+);
 
 function init(): void | false {
-	const checkbox = select('input[name="collab_privs"]');
+	const checkbox = $optional('input[name="collab_privs"]');
 	if (!checkbox) {
 		return false;
 	}
 
-	update(checkbox); // The sidebar checkbox may already be un-checked
-	delegate(document, 'input[name="collab_privs"]', 'change', toggleHandler);
+	if (pageDetect.isPRConversation()) {
+		attachElement(
+			closestElement('.discussion-sidebar-item', checkbox),
+			{after: getWarning},
+		);
+	} else {
+		const option = closestElement('.js-collab-option', checkbox);
+
+		// Prevent layout shifting when warning appears
+		option.classList.remove('flex-auto');
+		const actionRow = option.parentElement!;
+		actionRow.classList.add('mt-1');
+		actionRow.parentElement!.classList.remove('flex-wrap');
+
+		attachElement(
+			actionRow.lastElementChild!,
+			{after: getWarning},
+		);
+	}
 }
 
-void features.add(__filebasename, {
+void features.add(import.meta.url, {
 	include: [
 		pageDetect.isCompare,
 		pageDetect.isPRConversation,
 	],
-	deduplicate: 'has-rgh-inner',
+	exclude: [
+		pageDetect.isMergedPR,
+	],
+	awaitDomReady: true,
 	init,
 });
+
+/*
+
+Test URLs:
+
+1. Open https://github.com/pulls?q=+is%3Apr+is%3Aopen+author%3A%40me+archived%3Afalse+-user%3A%40me+
+2. Open any PR opened from a fork
+3. Toggle the checkbox in the sidebar
+
+*/

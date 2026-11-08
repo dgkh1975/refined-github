@@ -1,77 +1,32 @@
+import cx from 'clsx';
+import delegate, {type DelegateEvent} from 'delegate-it';
 import React from 'dom-chef';
-import select from 'select-dom';
-import delegate from 'delegate-it';
 import elementReady from 'element-ready';
 import * as pageDetect from 'github-url-detection';
+import HistoryIcon from 'octicons-plain-react/History';
+import {$, closestElement, closestElementOptional} from 'select-dom';
 
-import features from '.';
-import * as api from '../github-helpers/api';
-import GitHubURL from '../github-helpers/github-url';
-import addNotice from '../github-widgets/notice-bar';
-import {buildRepoURL, isPermalink} from '../github-helpers';
+import features from '../feature-manager.js';
+import api from '../github-helpers/api.js';
+import {linkifiedUrlClass} from '../github-helpers/dom-formatters.js';
+import getDefaultBranch from '../github-helpers/get-default-branch.js';
+import GitHubFileUrl from '../github-helpers/github-file-url.js';
+import {buildRepoUrl, isPermalink} from '../github-helpers/index.js';
+import addNotice from '../github-helpers/notice-bar.js';
+import {commentMenuButton, commentSelector, prCommentMenu} from '../github-helpers/selectors.js';
+import observe from '../helpers/selector-observer.js';
+import GetCommitAtDate from './comments-time-machine-links.gql';
+import {saveOriginalHref} from './last-update-sort.js';
 
-async function updateURLtoDatedSha(url: GitHubURL, date: string): Promise<void> {
-	const {repository} = await api.v4(`
-		repository() {
-			ref(qualifiedName: "${url.branch}") {
-				target {
-					... on Commit {
-						history(first: 1, until: "${date}") {
-							nodes {
-								oid
-							}
-						}
-					}
-				}
-			}
-		}
-	`);
+async function updateUrltoDatedSha(url: GitHubFileUrl, date: string): Promise<void> {
+	const {repository} = await api.v4(GetCommitAtDate, {variables: {date, branch: url.branch}});
 
 	const [{oid}] = repository.ref.target.history.nodes;
-	select('a.rgh-link-date')!.pathname = url.assign({branch: oid}).pathname;
-}
-
-function addInlineLinks(menu: HTMLElement, timestamp: string): void {
-	const comment = menu.closest('.js-comment')!;
-
-	const links = select.all<HTMLAnchorElement>(`
-		[href^="${location.origin}"][href*="/blob/"]:not(.rgh-linkified-code),
-		[href^="${location.origin}"][href*="/tree/"]:not(.rgh-linkified-code)
-	`, comment);
-
-	for (const link of links) {
-		const linkParts = link.pathname.split('/');
-		// Skip permalinks
-		if (/^[\da-f]{40}$/.test(linkParts[4])) {
-			continue;
-		}
-
-		const searchParameters = new URLSearchParams(link.search);
-		searchParameters.set('rgh-link-date', timestamp);
-		link.search = String(searchParameters);
-	}
-}
-
-function addDropdownLink(menu: HTMLElement, timestamp: string): void {
-	const dropdown = select('.show-more-popover', menu.parentElement!)!;
-
-	dropdown.append(
-		<>
-			<div className="dropdown-divider"/>
-			<a
-				href={buildRepoURL(`tree/HEAD@{${timestamp}}`)}
-				className="dropdown-item btn-link rgh-linkified-code"
-				role="menuitem"
-				title="Browse repository like it appeared on this day"
-			>
-				View repo at this time
-			</a>
-		</>,
-	);
+	$('a.rgh-link-date').pathname = url.assign({branch: oid}).pathname;
 }
 
 async function showTimeMachineBar(): Promise<void | false> {
-	const url = new URL(location.href); // This can't be replaced with `GitHubURL` because `getCurrentBranch` throws on 404s
+	const url = new URL(location.href); // This can't be replaced with `GitHubFileURL` because `getCurrentGitRef` throws on 404s
 	const date = url.searchParams.get('rgh-link-date')!;
 
 	// Drop parameter from current page after using it
@@ -88,54 +43,157 @@ async function showTimeMachineBar(): Promise<void | false> {
 			return false;
 		}
 
-		const lastCommitDate = await elementReady('.repository-content .Box.Box--condensed relative-time', {waitForChildren: false});
+		const lastCommitDate = await elementReady(
+			'div[data-testid="latest-commit-details"] relative-time',
+			{waitForChildren: false},
+		);
 		if (lastCommitDate && date > lastCommitDate.getAttribute('datetime')!) {
 			return false;
 		}
 
-		const parsedUrl = new GitHubURL(location.href);
-		// Due to GitHub’s bug of supporting branches with slashes: #2901
-		void updateURLtoDatedSha(parsedUrl, date); // Don't await it, since the link will usually work without the update
+		const parsedUrl = new GitHubFileUrl(location.href);
 
+		// Handle `isRepoHome` #4979
+		parsedUrl.branch ||= await getDefaultBranch();
+		parsedUrl.route ||= 'tree';
+
+		// Due to GitHub’s bug of supporting branches with slashes: #2901
+		void updateUrltoDatedSha(parsedUrl, date); // Don't await it, since the link will usually work without the update
+
+		// Set temporary URL AFTER calling `updateURLtoDatedSha`
 		parsedUrl.branch = `${parsedUrl.branch}@{${date}}`;
+
+		// Use new path in link
 		url.pathname = parsedUrl.pathname;
 	}
 
 	const link = (
-		<a className="rgh-link-date" href={String(url)} data-pjax="#repo-content-pjax-container">
+		<a className="rgh-link-date" href={url.href}>
 			view this object as it appeared at the time of the comment
 		</a>
 	);
-	addNotice(
-		<>You can also {link} (<relative-time datetime={date}/>)</>,
+	await addNotice(
+		<>
+			You can also {link} (<relative-time datetime={date} />)
+		</>,
 	);
 }
 
-function updateMenu({delegateTarget: menu}: delegate.Event<MouseEvent, HTMLElement>): void {
-	if (menu.classList.contains('rgh-time-machine-links')) {
+function addDateParameterToLink(link: HTMLAnchorElement): void {
+	if (!pageDetect.isRepoGitObject(link)) {
 		return;
 	}
 
-	const timestamp = menu.closest('.js-comment:not(.timeline-comment-group), .js-timeline-item')!.querySelector('relative-time')!.attributes.datetime.value;
+	// Skip links that already have a date parameter #9177
+	const searchParameters = new URLSearchParams(link.search);
+	if (searchParameters.has('rgh-link-date')) {
+		return;
+	}
 
-	addDropdownLink(menu, timestamp);
-	addInlineLinks(menu, timestamp);
-	menu.classList.add('rgh-time-machine-links');
+	// Skip permalinks
+	const linkParts = link.pathname.split('/');
+	if (/^[\da-f]{40}$/.test(linkParts[4])) {
+		return;
+	}
+
+	const comment = closestElement(commentSelector, link);
+	const relativeTime = $('relative-time', comment);
+	const timestamp = relativeTime.attributes.datetime.value;
+
+	saveOriginalHref(link);
+
+	searchParameters.set('rgh-link-date', timestamp);
+	link.search = String(searchParameters);
 }
 
-function init(): void {
-	// Use `click` handler instead of `toggle` because there's no easy selector just for `details`
-	delegate(document, '.js-reaction-popover-container ~ details:last-child', 'click', updateMenu);
+function addDropdownLink(menu: HTMLElement, timestamp: string): void {
+	$('.show-more-popover', menu.parentElement!).append(
+		<div className="dropdown-divider" />,
+		<a
+			href={buildRepoUrl(`tree/HEAD@{${timestamp}}`)}
+			className={cx('dropdown-item btn-link', linkifiedUrlClass)}
+			role="menuitem"
+			title="Browse repository like it appeared on this day"
+		>
+			View repo at this time
+		</a>,
+	);
 }
 
-void features.add(__filebasename, {
+function addDropdownLinkReact({delegateTarget}: DelegateEvent): void {
+	const timestamp = $(
+		'relative-time[datetime]',
+		closestElement(commentSelector, delegateTarget),
+	).attributes.datetime.value;
+	const menuItemList = $('[class^="prc-ActionList-ActionList"]');
+	const menuItem = $('[class^="prc-ActionList-ActionListItem"]', menuItemList).cloneNode(true);
+
+	menuItem.removeAttribute('aria-keyshortcuts');
+	menuItem.role = 'none';
+	const menuItemContentWrapper = $('[class^="prc-ActionList-ActionListContent"]', menuItem);
+	const link = (
+		<a
+			href={buildRepoUrl(`tree/HEAD@{${timestamp}}`)}
+			className={cx(menuItemContentWrapper.className, linkifiedUrlClass)}
+			role="menuitem"
+			title="Browse repository like it appeared on this day"
+			aria-keyshortcuts="v"
+		/>
+	);
+	link.append(...menuItemContentWrapper.childNodes);
+	menuItemContentWrapper.replaceWith(link);
+	$('[class^="prc-ActionList-ItemLabel"]', menuItem).textContent = 'View repo at this time';
+	$('[class^="prc-ActionList-LeadingVisual"]', menuItem).replaceChildren(<HistoryIcon />);
+
+	menuItemList.append(
+		<li className="dropdown-divider" aria-hidden="true" data-component="ActionList.Divider" />,
+		menuItem,
+	);
+}
+
+async function init(signal: AbortSignal): Promise<void> {
+	observe(prCommentMenu, menu => {
+		if (closestElementOptional('.js-pending-review-comment', menu)) {
+			return;
+		}
+
+		// The timestamp of main review comments isn't in their header but in the timeline event above #5423
+		const timestamp = $(
+			'relative-time',
+			closestElement([
+				'.js-comment:not([id^="pullrequestreview-"])',
+				'.js-timeline-item',
+			], menu),
+		)
+			.attributes
+			.datetime
+			.value;
+
+		addDropdownLink(menu, timestamp);
+	}, {signal});
+
+	delegate(
+		commentMenuButton,
+		'click',
+		addDropdownLinkReact,
+		{signal},
+	);
+
+	observe(
+		`${commentSelector} a[href^="${location.origin}"]:not(.${linkifiedUrlClass})`,
+		addDateParameterToLink,
+		{signal},
+	);
+}
+
+void features.add(import.meta.url, {
 	include: [
 		pageDetect.hasComments,
 	],
 	exclude: [
 		pageDetect.isGist,
 	],
-	deduplicate: 'has-rgh-inner',
+	requiresToken: true,
 	init,
 }, {
 	asLongAs: [
@@ -146,6 +204,16 @@ void features.add(__filebasename, {
 		pageDetect.isSingleFile,
 		pageDetect.isRepoTree,
 	],
-	awaitDomReady: false,
 	init: showTimeMachineBar,
 });
+
+/*
+Test URLs
+
+https://github.com/refined-github/refined-github/pull/1863
+https://github.com/refined-github/sandbox/issues/108
+
+See the bar on:
+
+- https://github.com/sindresorhus/refined-github/blob/main/source/features/mark-merge-commits-in-list.tsx?rgh-link-date=2019-03-04T13%3A04%3A18Z
+*/

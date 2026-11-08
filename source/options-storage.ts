@@ -1,47 +1,61 @@
-import OptionsSyncPerDomain, {Migration} from 'webext-options-sync-per-domain';
+import OptionsSyncPerDomain from 'webext-options-sync-per-domain';
 
-export type RGHOptions = typeof defaults;
+import {importedFeatures} from './feature-data.js';
+import renamedFeatures from './feature-renames.json' with {type: 'json'};
 
-function featureWasRenamed(from: string, to: string): Migration<RGHOptions> {
-	return (options: RGHOptions) => {
-		if (typeof options[`feature:${from}`] === 'boolean') {
-			options[`feature:${to}`] = options[`feature:${from}`];
-		}
-	};
+export type RghOptions = typeof defaults;
+
+// eslint-disable-next-line prefer-object-spread -- TypeScript hates this one weird trick
+const defaults = Object.assign({
+	actionUrl: 'https://github.com/',
+	customCss: '',
+	personalToken: [''],
+	logging: false,
+	logHttp: false,
+}, Object.fromEntries(importedFeatures.map(id => [`feature:${id}`, true])));
+
+export function isFeatureDisabled(options: RghOptions, id: string): boolean {
+	// Must check if it's specifically `false`: It could be undefined if not yet in the readme or if misread from the entry point #6606
+	// eslint-disable-next-line unicorn/no-unnecessary-boolean-comparison
+	return options[`feature:${id}`] === false;
 }
 
-// eslint-disable-next-line prefer-object-spread -- TypeScript doesn't merge the definitions so `...` is not equivalent.
-const defaults = Object.assign({
-	customCSS: '',
-	personalToken: '',
-	logging: false,
-	logHTTP: false,
-}, Object.fromEntries(__features__.map(id => [`feature:${id}`, true])));
-
 const migrations = [
-	featureWasRenamed('separate-draft-pr-button', 'one-click-pr-or-gist'), // Merged in May
-	featureWasRenamed('prevent-pr-commit-link-loss', 'prevent-link-loss'), // Merged in May
-	featureWasRenamed('remove-projects-tab', 'remove-unused-repo-tabs'), // Merged in July
-	featureWasRenamed('remove-unused-repo-tabs', 'clean-repo-tabs'), // Merged in July
-	featureWasRenamed('more-dropdown', 'clean-repo-tabs'), // Merged in July
-	featureWasRenamed('remove-diff-signs', 'hide-diff-signs'), // Merged in August
-	featureWasRenamed('remove-label-faster', 'quick-label-hiding'), // Merged in August
-	featureWasRenamed('edit-files-faster', 'quick-file-edit'), // Merged in August
-	featureWasRenamed('edit-comments-faster', 'quick-comment-edit'), // Merged in August
-	featureWasRenamed('delete-review-comments-faster', 'quick-review-comment-deletion'), // Merged in August
-	featureWasRenamed('hide-comments-faster', 'quick-comment-hiding'), // Merged in August
-	featureWasRenamed('faster-reviews', 'quick-review'), // Merged in August
-	featureWasRenamed('faster-pr-diff-options', 'quick-pr-diff-options'), // Merged in August
-	featureWasRenamed('hide-useless-comments', 'hide-low-quality-comments'), // Merged in August
-	featureWasRenamed('hide-useless-newsfeed-events', 'hide-noisy-newsfeed-events'), // Merged in August
-	featureWasRenamed('no-useless-split-diff-view', 'no-unnecessary-split-diff-view'), // Merged in August
-	featureWasRenamed('unwrap-useless-dropdowns', 'unwrap-unnecessary-dropdowns'), // Merged in August
-	featureWasRenamed('tag-changelog-link', 'tag-changes-link'), // Merged in October
-	featureWasRenamed('navigate-pages-with-arrow-keys', 'pagination-hotkey'), // Merged in September
+	(options: RghOptions): void => {
+		for (const [from, to] of Object.entries(renamedFeatures)) {
+			if (typeof options[`feature:${from}`] === 'boolean') {
+				options[`feature:${to}`] = options[`feature:${from}`];
+			}
+		}
+	},
+
+	// TODO [2027-06-01]: Drop
+	(options: RghOptions): void => {
+		if (typeof options.personalToken === 'string') {
+			options.personalToken = [options.personalToken];
+		}
+	},
+
+	// TODO [2027-01-01]: Drop
+	(options: RghOptions): void => {
+		if (options.logHTTP) {
+			options.logHttp = options.logHTTP;
+		}
+
+		if (options.customCSS) {
+			options.customCss = options.customCSS as unknown as string;
+		}
+	},
+
+	// Cleanup personal token array
+	(options: RghOptions): void => {
+		options.personalToken = options.personalToken.filter(string => string.trim());
+	},
 
 	// Removed features will be automatically removed from the options as well
 	OptionsSyncPerDomain.migrations.removeUnused,
 ];
 
 export const perDomainOptions = new OptionsSyncPerDomain({defaults, migrations});
-export default perDomainOptions.getOptionsForOrigin();
+const optionsStorage = perDomainOptions.getOptionsForOrigin();
+export default optionsStorage;

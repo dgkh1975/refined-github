@@ -1,110 +1,139 @@
-import React from 'dom-chef';
-import select from 'select-dom';
 import delegate from 'delegate-it';
-import regexJoin from 'regex-join';
+import React from 'dom-chef';
 import * as pageDetect from 'github-url-detection';
-import * as textFieldEdit from 'text-field-edit';
+import {$, $optional} from 'select-dom';
 
-import features from '.';
-import onPrMergePanelOpen from '../github-events/on-pr-merge-panel-open';
-import {getConversationNumber} from '../github-helpers';
+import features from '../feature-manager.js';
+import onCommitTitleUpdate from '../github-events/on-commit-title-update.js';
+import api from '../github-helpers/api.js';
+import {getConversationNumber, userCanLikelyMergePr} from '../github-helpers/index.js';
+import parseRenderedText from '../github-helpers/parse-rendered-text.js';
+import {confirmMergeButton} from '../github-helpers/selectors.js';
+import cleanPrCommitTitle from '../helpers/pr-commit-cleaner.js';
+import observe from '../helpers/selector-observer.js';
+import {setReactInputValue} from '../helpers/set-react-text-field-value.js';
 
-const mergeFormSelector = '.is-squashing form:not([hidden])';
-const prTitleFieldSelector = '.js-issue-update input[name="issue[title]"]';
-const prTitleSubmitSelector = '.js-issue-update button[type="submit"]';
+const commitTitleFieldSelector = '[data-testid="mergebox-partial"] input[type="text"]';
 
-function getCommitTitleField(): HTMLInputElement | undefined {
-	return select<HTMLInputElement>(`${mergeFormSelector} #merge_title_field`);
+function getCurrentCommitTitle(): string {
+	return $(commitTitleFieldSelector).value.trim();
 }
 
+export function formatPrCommitTitle(title: string, prNumber = getConversationNumber()!): string {
+	return `${title} (#${prNumber})`;
+}
+
+const prTitleSelector = '[data-component="TitleArea"] h1';
+
 function createCommitTitle(): string {
-	const prTitle = select(prTitleFieldSelector)!.value.trim();
-	return `${prTitle} (#${getConversationNumber()!})`;
+	const prTitle = $([
+		`${prTitleSelector} .markdown-title`,
+		'div[class^="prc-PageLayout-Header"] input',
+	]);
+	const prTitleText = prTitle instanceof HTMLInputElement ? prTitle.value.trim() : parseRenderedText(prTitle);
+	return formatPrCommitTitle(prTitleText);
 }
 
 function needsSubmission(): boolean {
-	const inputField = getCommitTitleField();
-	if (!inputField || inputField.value === '') {
+	// `needsSubmission` is also called when the PR title is changed, in order to update the open merge box in real time
+	if (!/squash/i.test($optional(confirmMergeButton)?.textContent ?? '')) {
 		return false;
 	}
 
-	// Ensure that the required fields are on the page
-	if (!select.exists(prTitleFieldSelector + ',' + prTitleSubmitSelector)) {
-		features.log.error(__filebasename, 'Can’t update the PR title');
-		return false;
-	}
-
-	return createCommitTitle() !== inputField.value;
+	const currentCommitTitle = getCurrentCommitTitle();
+	return Boolean(currentCommitTitle) && (createCommitTitle() !== currentCommitTitle);
 }
 
-function getUI(): HTMLElement {
-	return select(`${mergeFormSelector} .rgh-sync-pr-commit-title-note`) ?? (
+function getUi(): HTMLElement {
+	const cancelButton = (
+		<button type="button" className="btn-link Link--muted text-underline rgh-sync-pr-commit-title">
+			Cancel
+		</button>
+	);
+	return $optional('.rgh-sync-pr-commit-title-note') ?? (
 		<p className="note rgh-sync-pr-commit-title-note">
-			The title of this PR will be updated to match this title. <button type="button" className="btn-link Link--muted text-underline rgh-sync-pr-commit-title">Cancel</button>
+			The title of this PR will be updated to match this title. {cancelButton}
 		</p>
 	);
 }
 
-function updateUI(): void {
+function updateUi(): void {
 	if (needsSubmission()) {
-		getCommitTitleField()!.after(getUI());
+		$(commitTitleFieldSelector).parentElement!.after(getUi());
 	} else {
-		getUI().remove();
+		getUi().remove();
 	}
 }
 
-function updatePRTitle(): void {
+async function updatePrTitle(): Promise<void> {
 	if (!needsSubmission()) {
 		return;
 	}
 
 	// Remove PR number from commit title
-	const prTitle = getCommitTitleField()!.value
-		.replace(regexJoin(/\s*\(/, '#' + getConversationNumber()!, /\)$/), '');
+	const title = cleanPrCommitTitle(getCurrentCommitTitle(), getConversationNumber()!);
 
-	// Fill and submit title-change form
-	select(prTitleFieldSelector)!.value = prTitle;
-	select(prTitleSubmitSelector)!.click(); // `form.submit()` isn't sent via ajax
+	await api.v3(`pulls/${getConversationNumber()!}`, {
+		method: 'PATCH',
+		body: {title},
+	});
 }
 
-async function updateCommitTitle(event: Event): Promise<void> {
-	const field = getCommitTitleField();
-
-	// Only if the user hasn't already interacted with it in this session
-	if (field && event.type !== 'session:resume') {
-		textFieldEdit.set(field, createCommitTitle());
+async function updateCommitTitle(): Promise<void> {
+	if (!needsSubmission()) {
+		return;
 	}
 
-	updateUI();
+	const field = $(commitTitleFieldSelector);
+	setReactInputValue(field, createCommitTitle());
 }
 
 function disableSubmission(): void {
-	deinit();
-	getUI().remove();
+	features.unload(import.meta.url);
+	getUi().remove();
 }
 
-let listeners: delegate.Subscription[];
-function init(): void {
-	listeners = [
-		onPrMergePanelOpen(updateCommitTitle),
-		delegate(document, '#merge_title_field', 'input', updateUI),
-		delegate(document, 'form.js-merge-pull-request', 'submit', updatePRTitle),
-		delegate(document, '.rgh-sync-pr-commit-title', 'click', disableSubmission),
-	];
+function init(signal: AbortSignal): void {
+	// PR title -> Commit title field
+	// On panel open
+	observe(commitTitleFieldSelector, updateCommitTitle, {signal});
+
+	// On PR title change
+	observe(
+		prTitleSelector,
+		updateCommitTitle,
+		{signal},
+	);
+
+	// Commit title field -> toggle checkbox visibility
+	onCommitTitleUpdate(updateUi, signal);
+
+	// On submission, update PR
+	delegate(confirmMergeButton, 'click', updatePrTitle, {signal});
+
+	// On "Cancel", disable the feature
+	delegate('.rgh-sync-pr-commit-title', 'click', disableSubmission, {signal});
 }
 
-function deinit(): void {
-	for (const delegation of listeners) {
-		delegation.destroy();
-	}
-
-	listeners.length = 0;
-}
-
-void features.add(__filebasename, {
+void features.add(import.meta.url, {
+	asLongAs: [
+		userCanLikelyMergePr,
+	],
 	include: [
 		pageDetect.isPRConversation,
 	],
-	deduplicate: 'has-rgh-inner',
+	exclude: [
+		pageDetect.isMergedPR,
+	],
+	awaitDomReady: true, // DOM-based filters, feature appears at the end of the page
+	requiresToken: true,
 	init,
 });
+
+/*
+
+Test URLs:
+
+1. Open any PR in https://github.com/pulls
+
+*/

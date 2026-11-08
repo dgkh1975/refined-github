@@ -1,0 +1,73 @@
+import filenamify from 'filenamify';
+import {access, mkdir, readFile, unlink, writeFile} from 'node:fs/promises';
+import pMemoize from 'p-memoize';
+import {$$optional} from 'select-dom';
+import {assert, describe, test} from 'vitest';
+
+import * as exports from './selectors.js';
+
+const fsCache = {
+	async get(path: string): Promise<string | undefined> {
+		try {
+			const value = await readFile(path, 'utf8');
+			return value;
+		} catch {
+			return undefined;
+		}
+	},
+	async set(path: string, contents: string): Promise<void> {
+		await mkdir('./test/.cache', {recursive: true});
+		await writeFile(path, contents);
+	},
+	async has(path: string): Promise<boolean> {
+		try {
+			await access(path);
+			return true;
+		} catch {
+			return false;
+		}
+	},
+	async delete(path: string): Promise<void> {
+		await unlink(path);
+	},
+} as const;
+
+const fetchDocument = pMemoize(async (url: string): Promise<string> => {
+	const request = await fetch(url, {
+		headers: {
+			accept: 'text/html',
+		},
+	});
+	return request.text();
+}, {
+	cacheKey: ([url]) => `./test/.cache/${filenamify(url.replace('https://github.com', ''))}.html`,
+	cache: fsCache,
+});
+
+// It's broken: https://github.com/refined-github/refined-github/issues/9314
+// Also happy-dom fails to parse the selectors, so if it still says "not a valid selector" we need to switch to jsdom or a proper browser.
+describe.concurrent.skip('selectors', () => {
+	// Exclude URL arrays
+	const selectors: Array<[name: string, selector: string]> = [];
+	for (const [name, selector] of Object.entries(exports)) {
+		if (!name.endsWith('_')) {
+			selectors.push([name, String(selector)]);
+		}
+	}
+
+	test.each(selectors)('%s', {timeout: 9999}, async (name, selector: string) => {
+		// @ts-expect-error Index signature bs
+
+		const urls = exports[name + '_'] as exports.UrlMatch[];
+
+		assert.isArray(urls, `No URLs defined for "${name}"`);
+		await Promise.all(urls.map(async ([expectations, url]) => {
+			const html = await fetchDocument(url);
+			document.open();
+			document.write(html);
+			document.close();
+			const matches = $$optional(selector, document);
+			assert.equal(matches.length, expectations, `Got wrong number of matches on ${url}:\n${selector}`);
+		}));
+	});
+});

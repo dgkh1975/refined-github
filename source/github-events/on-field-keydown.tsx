@@ -1,28 +1,58 @@
-import select from 'select-dom';
-import delegate from 'delegate-it';
+/* eslint-disable byo/no-inline-functions -- Covered by memoization */
 
-type DelegateFieldEvent = delegate.EventHandler<KeyboardEvent, HTMLTextAreaElement>;
+import delegate, {type DelegateEventHandler} from 'delegate-it';
+import memoize from 'memoize';
+import {elementExists} from 'select-dom';
 
-function onFieldKeydown(selector: string, callback: DelegateFieldEvent): void {
-	delegate<HTMLTextAreaElement, 'keydown'>(document, selector, 'keydown', event => {
+type TextField = HTMLTextAreaElement | HTMLInputElement;
+type KeydownHandler = DelegateEventHandler<KeyboardEvent, TextField>;
+
+/** Wrapper that skips execution if the user is *in the middle of something*. */
+function ignoreInteractive(callback: KeydownHandler): KeydownHandler {
+	return event => {
 		const field = event.delegateTarget;
-
-		// The suggester is GitHub’s autocomplete dropdown
-		if (select.exists('.suggester', field.form!) || event.isComposing) {
+		if (
+			event.isComposing
+			// New autocomplete dropdown
+			|| field.hasAttribute('aria-autocomplete')
+			// Classic autocomplete dropdown
+			|| elementExists('.suggester', field.form!)
+		) {
 			return;
 		}
 
 		callback(event);
-	}, {
-		// Adds support for `esc` key; GitHub seems to use `stopPropagation` on it
-		capture: true,
-	});
+	};
 }
 
-export function onCommentFieldKeydown(callback: DelegateFieldEvent): void {
-	onFieldKeydown('.js-comment-field, #commit-description-textarea', callback);
+/**
+Memoizes the creation of the wrapped listener.
+If the same `callback` function reference is passed multiple times,
+it returns the exact same wrapped handler, enabling `delegate-it` deduplication.
+*/
+const deduplicateInteractiveFilter = memoize((callback: KeydownHandler) => ignoreInteractive(callback));
+
+// Support for `esc` key (where GitHub uses stopPropagation)
+const capture = true;
+
+export function onCommentFieldKeydown(callback: KeydownHandler, signal: AbortSignal): void {
+	delegate<TextField, 'keydown'>(
+		'textarea',
+		'keydown',
+		deduplicateInteractiveFilter(callback),
+		{signal, capture},
+	);
 }
 
-export function onConversationTitleFieldKeydown(callback: DelegateFieldEvent): void {
-	onFieldKeydown('#issue_title, #pull_request_title', callback);
+export function onConversationTitleFieldKeydown(callback: KeydownHandler, signal: AbortSignal): void {
+	delegate<TextField, 'keydown'>(
+		[
+			'[class^="prc-PageLayout-Header"] input', // PR
+			'input[placeholder="Title"]', // Issue
+			"input[name='pull_request[title]']", // Compare
+		],
+		'keydown',
+		deduplicateInteractiveFilter(callback),
+		{signal, capture},
+	);
 }

@@ -1,27 +1,46 @@
+import delegate, {type DelegateEvent} from 'delegate-it';
 import React from 'dom-chef';
-import select from 'select-dom';
-import delegate from 'delegate-it';
 import * as pageDetect from 'github-url-detection';
+import {$, $$, closestElement, closestElementOptional} from 'select-dom';
 
-import features from '.';
+import features from '../feature-manager.js';
+
+const formSelector = [
+	'form[action$="/minimize-comment"]',
+	'form[action$="/minimize"]', // Review thread comments
+] as const;
 
 function generateSubmenu(hideButton: Element): void {
-	if (hideButton.closest('.rgh-quick-comment-hiding-details')) {
+	if (closestElementOptional('.rgh-quick-comment-hiding-details', hideButton)) {
 		// Already generated
 		return;
 	}
 
-	const detailsElement = hideButton.closest('details')!;
+	const detailsElement = closestElement('details', hideButton);
 	detailsElement.classList.add('rgh-quick-comment-hiding-details');
 
-	const comment = hideButton.closest('.unminimized-comment')!;
-	const hideCommentForm = select('.js-comment-minimize', comment)!;
+	const comment = closestElement('.unminimized-comment', hideButton);
+	const hideCommentForm = $(formSelector, comment);
 
-	hideCommentForm.classList.remove('d-flex');
+	// Generate dropdown
+	const newForm = hideCommentForm.cloneNode();
+	const fields = [...hideCommentForm.elements].map(field => field.cloneNode());
+	newForm.append(<i hidden>{fields}</i>); // Add existing fields (comment ID, token)
+	newForm.setAttribute('novalidate', ''); // Ignore the form's required attributes
 
-	// Generate dropdown items
-	for (const reason of select.all('[name="classifier"] option:not([value=""])', comment)) {
-		hideCommentForm.append(
+	// Imitate existing menu, reset classes
+	newForm.className = '';
+	newForm.classList.add(
+		'js-comment-minimize',
+		'dropdown-menu',
+		'dropdown-menu-sw',
+		'color-fg-default',
+		'show-more-popover',
+		'anim-scale-in',
+	);
+
+	for (const reason of $$('option:not([value=""])', hideCommentForm.elements.classifier)) {
+		newForm.append(
 			<button
 				type="submit"
 				name="classifier"
@@ -34,56 +53,58 @@ function generateSubmenu(hideButton: Element): void {
 		);
 	}
 
-	// Drop previous form controls
-	select('.btn', hideCommentForm)!.remove();
-	select('[name="classifier"]', hideCommentForm)!.remove();
-
 	// Close immediately after the clicking option
-	hideCommentForm.addEventListener('click', () => {
-		detailsElement.removeAttribute('open');
+	newForm.addEventListener('click', () => {
+		detailsElement.open = false;
 	});
 
-	// Imitate existing menu
-	hideCommentForm.classList.add('dropdown-menu', 'dropdown-menu-sw', 'color-text-primary', 'show-more-popover', 'anim-scale-in');
-
-	detailsElement.append(hideCommentForm);
+	detailsElement.append(newForm);
 }
 
 // Shows menu on top of mainDropdownContent when "Hide" is clicked;
 // Hide it when dropdown closes.
 // Uses `v-hidden` to avoid conflicts with `close-out-of-view-modals`
-function toggleSubMenu(hideButton: Element, show: boolean): void {
-	const dropdown = hideButton.closest('details')!;
+function toggleSubmenu(hideButton: Element, show: boolean): void {
+	const dropdown = closestElement('details', hideButton);
 
 	// Native dropdown
-	select('details-menu', dropdown)!.classList.toggle('v-hidden', show);
+	$('details-menu', dropdown).classList.toggle('v-hidden', show);
 
 	// "Hide comment" dropdown
-	select('form.js-comment-minimize', dropdown)!.classList.toggle('v-hidden', !show);
+	$(formSelector, dropdown).classList.toggle('v-hidden', !show);
 }
 
-function resetDropdowns(event: delegate.Event): void {
-	toggleSubMenu(event.delegateTarget, false);
+function resetDropdowns(event: DelegateEvent): void {
+	toggleSubmenu(event.delegateTarget, false);
 }
 
-function showSubmenu(event: delegate.Event): void {
+function showSubmenu(event: DelegateEvent): void {
 	generateSubmenu(event.delegateTarget);
-	toggleSubMenu(event.delegateTarget, true);
+	toggleSubmenu(event.delegateTarget, true);
 
 	event.stopImmediatePropagation();
 	event.preventDefault();
 }
 
-function init(): void {
-	// `useCapture` required to be fired before GitHub's handlers
-	delegate(document, '.js-comment-hide-button', 'click', showSubmenu, true);
-	delegate(document, '.rgh-quick-comment-hiding-details', 'toggle', resetDropdowns, true);
+function init(signal: AbortSignal): void {
+	// `capture: true` required to be fired before GitHub's handlers
+	delegate('.js-comment-hide-button', 'click', showSubmenu, {capture: true, signal});
+	delegate('.rgh-quick-comment-hiding-details', 'toggle', resetDropdowns, {capture: true, signal});
 }
 
-void features.add(__filebasename, {
+// TODO [2027-01-01]: Drop feature after the legacy PR view is removed
+// https://github.com/refined-github/refined-github/issues/7856#issuecomment-2411492400
+void features.add(import.meta.url, {
 	include: [
 		pageDetect.hasComments,
 	],
-	deduplicate: 'has-rgh-inner',
 	init,
 });
+
+/*
+
+Test URLs
+
+https://github.com/refined-github/sandbox/pull/47
+
+*/

@@ -1,102 +1,206 @@
+import './update-pr-from-base-branch.css';
+
+import cx from 'clsx';
+import delegate, {type DelegateEvent} from 'delegate-it';
 import React from 'dom-chef';
-import select from 'select-dom';
-import onetime from 'onetime';
-import delegate from 'delegate-it';
-import {AlertIcon} from '@primer/octicons-react';
 import * as pageDetect from 'github-url-detection';
-import {observe, Observer} from 'selector-observer';
+import {$, $$, $optional, closestElement, elementExists} from 'select-dom';
 
-import features from '.';
-import * as api from '../github-helpers/api';
-import {getConversationNumber} from '../github-helpers';
+import {withTooltipRef} from '../components/tooltip.js';
+import features from '../feature-manager.js';
+import api from '../github-helpers/api.js';
+import getPrInfo from '../github-helpers/get-pr-info.js';
+import {isArchivedRepoAsync} from '../github-helpers/index.js';
+import {getBranches} from '../github-helpers/pr-branches.js';
+import {deletedHeadRepository} from '../github-helpers/selectors.js';
+import showToast from '../github-helpers/toast.js';
+import {getIdentifiers} from '../helpers/feature-helpers.js';
+import observe from '../helpers/selector-observer.js';
+import updatePullRequestBranch from './update-pr-from-base-branch.gql';
 
-const selectorForPushablePRNotice = '.merge-pr > .color-text-secondary:first-child:not(.rgh-update-pr)';
-let observer: Observer;
+/* eslint-disable @typescript-eslint/naming-convention -- Uppercase to match GraphQL enum values */
+const updateMethods = {
+	MERGE: {
+		buttonLabel: 'Update branch',
+		tooltip: 'Update branch with merge commit using Refined GitHub',
+	},
+	REBASE: {
+		buttonLabel: 'Rebase',
+		tooltip: 'Update branch with rebase using Refined GitHub',
+	},
+};
+/* eslint-enable @typescript-eslint/naming-convention */
 
-function getBranches(): {base: string; head: string} {
-	return {
-		base: select('.base-ref')!.textContent!.trim(),
-		head: select('.head-ref')!.textContent!.trim(),
-	};
-}
+/**
+https://docs.github.com/en/graphql/reference/enums#pullrequestbranchupdatemethod
+*/
+type UpdateMethod = keyof typeof updateMethods;
 
-async function mergeBranches(): Promise<AnyObject> {
-	return api.v3(`pulls/${getConversationNumber()!}/update-branch`, {
-		method: 'PUT',
-		headers: {
-			Accept: 'application/vnd.github.lydian-preview+json',
+/**
+https://docs.github.com/en/graphql/reference/input-objects#updatepullrequestbranchinput
+*/
+type MergeBranchesOptions = {
+	expectedHeadOid: string;
+	pullRequestId: string;
+	updateMethod: UpdateMethod;
+};
+
+async function mergeBranches(options: MergeBranchesOptions): Promise<AnyObject> {
+	return api.v4uncached(updatePullRequestBranch, {
+		variables: {
+			input: {...options},
 		},
-		ignoreHTTPStatus: true,
 	});
 }
 
-async function handler({delegateTarget}: delegate.Event): Promise<void> {
-	const {base, head} = getBranches();
-	if (!confirm(`Merge the ${base} branch into ${head}?`)) {
+async function handler({delegateTarget: button}: DelegateEvent<MouseEvent, HTMLButtonElement>): Promise<void> {
+	button.disabled = true;
+	const {method} = button.dataset as {method: UpdateMethod};
+
+	await showToast(async () => {
+		const {base} = getBranches();
+		const {id, headRefOid} = await getPrInfo(base.relative);
+		const options = {
+			expectedHeadOid: headRefOid,
+			pullRequestId: id,
+			updateMethod: method,
+		};
+		// eslint-disable-next-line @typescript-eslint/use-unknown-in-catch-callback-variable -- Just pass it along
+		const response = await mergeBranches(options).catch(error => error);
+		if (response instanceof Error) {
+			throw new Error(`Error updating the branch: ${response.message}`, {cause: response});
+		}
+	}, {
+		message: 'Updating branch…',
+		doneMessage: 'Branch updated',
+	});
+
+	closestElement('.ButtonGroup', button).remove();
+}
+
+const feature = getIdentifiers(import.meta.url);
+
+function createButtonGroup(): JSX.Element {
+	return (
+		<div className="ButtonGroup">
+			{Object.entries(updateMethods).map(([method, label]) => (
+				<div>
+					<button
+						ref={withTooltipRef(label.tooltip)}
+						className={cx('Button--secondary Button--medium Button', feature.class)}
+						data-method={method}
+						type="button"
+					>
+						<span className="Button-content">
+							<span className="Button-label">
+								{label.buttonLabel}
+							</span>
+						</span>
+					</button>
+				</div>
+			))}
+		</div>
+	);
+}
+
+function setButtonsDisabledState(base: Element, disabled: boolean): void {
+	for (const button of $$('button', base)) {
+		button.disabled = disabled;
+	}
+}
+
+async function isBranchUpdatable(): Promise<boolean> {
+	const {base} = getBranches();
+	const prInfo = await getPrInfo(base.relative);
+
+	const hasBranchAccess = ['ADMIN', 'WRITE'].includes(prInfo.headRepoPerm); // #8555
+	const canUpdateBranch = prInfo.viewerCanUpdate || prInfo.viewerCanEditFiles || hasBranchAccess;
+
+	return prInfo.needsUpdate && canUpdateBranch && prInfo.mergeable !== 'CONFLICTING';
+}
+
+async function manageButtonGroup(stateIcon: Element): Promise<void> {
+	const existingButtonGroup = $optional(`.ButtonGroup:has(.${feature.class})`);
+
+	if (elementExists('.octicon-check', stateIcon)) {
+		if (!await isBranchUpdatable()) {
+			return;
+		}
+
+		if (existingButtonGroup) {
+			setButtonsDisabledState(existingButtonGroup, false);
+			return;
+		}
+
+		// The same container as the native button uses
+		$('section[aria-label="Conflicts"] div[class*="contentLayout"]')
+			.append(createButtonGroup());
+
 		return;
 	}
 
-	const statusMeta = delegateTarget.parentElement!;
-	statusMeta.textContent = 'Updating branch…';
-	observer.abort();
+	// Loading icon, GitHub is determining the mergeability status
+	if (stateIcon.className.includes('Spinner')) {
+		if (existingButtonGroup) {
+			// Disable buttons until the status is determined
+			setButtonsDisabledState(existingButtonGroup, true);
+		}
 
-	const response = await mergeBranches();
-	if (response.ok) {
-		statusMeta.remove();
-	} else {
-		statusMeta.textContent = response.message ?? 'Error';
-		statusMeta.prepend(<AlertIcon/>, ' ');
-		throw new api.RefinedGitHubAPIError('update-pr-from-base-branch: ' + JSON.stringify(response));
+		return;
 	}
+
+	if (elementExists('.octicon-alert-fill', stateIcon)) {
+		// Button group won't exist if it wasn't previously added
+		// For example, if a PR already had conflicts when its page was opened
+		existingButtonGroup?.remove();
+		return;
+	}
+
+	throw new TypeError('Unexpected state icon', {cause: stateIcon});
 }
 
-async function addButton(position: Element): Promise<void> {
-	const {base, head} = getBranches();
-	const {status} = await api.v3(`compare/${base}...${head}`);
-
-	if (status === 'diverged') {
-		position.append(' ', (
-			<span className="status-meta d-inline-block rgh-update-pr-from-base-branch">
-				You can <button type="button" className="btn-link">update the base branch</button>.
-			</span>
-		));
-	}
+async function init(signal: AbortSignal): Promise<false | void> {
+	delegate(feature.selector, 'click', handler, {signal});
+	observe(
+		'section[aria-label="Conflicts"] .flex-shrink-0 > :first-child',
+		manageButtonGroup,
+		{signal},
+	);
 }
 
-const waitForText = onetime(() => {
-	delegate(document, '.rgh-update-pr-from-base-branch', 'click', handler);
-	observer = observe(selectorForPushablePRNotice, {
-		add(position) {
-			position.classList.add('rgh-update-pr');
-			void addButton(position);
-		},
-	});
-});
-
-async function init(): Promise<void | false> {
-	await api.expectToken();
-
-	// "Resolve conflicts" is the native button to update the PR
-	if (select.exists('.js-merge-pr a[href$="/conflicts"]')) {
-		return false;
-	}
-
-	// Quick check before using selector-observer on it
-	if (!select.exists(selectorForPushablePRNotice)) {
-		return false;
-	}
-
-	waitForText();
-}
-
-void features.add(__filebasename, {
+void features.add(import.meta.url, {
 	include: [
 		pageDetect.isPRConversation,
 	],
 	exclude: [
-		pageDetect.isClosedPR,
-		() => select('.head-ref')!.title === 'This repository has been deleted',
+		pageDetect.isMergedPR,
+		() => elementExists(deletedHeadRepository),
+		isArchivedRepoAsync,
 	],
-	deduplicate: 'has-rgh-inner',
+	awaitDomReady: true, // DOM-based exclusions
+	requiresToken: true,
 	init,
 });
+
+/*
+Test URLs
+
+PR without conflicts
+https://github.com/refined-github/sandbox/pull/60
+
+Draft PR without conflicts
+https://github.com/refined-github/sandbox/pull/61
+
+Native "Update branch" button
+(pick a conflict-free PR from https://github.com/refined-github/refined-github/pulls?q=is%3Apr+is%3Aopen+sort%3Acreated-asc)
+
+Native "Resolve conflicts" button
+https://github.com/refined-github/sandbox/pull/9
+
+Cross-repo PR with long branch names
+https://github.com/refined-github/sandbox/pull/13
+
+PRs to repos without write access, find one among your own PRs here:
+https://github.com/pulls?q=is%3Apr+is%3Aopen+author%3A%40me+archived%3Afalse+-user%3A%40me
+
+*/

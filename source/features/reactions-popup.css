@@ -1,0 +1,67 @@
+/* Restore two-line layout */
+:root .dropdown-menu-reactions,
+/* React issue view */
+:root ul[data-component='ActionList']:has(> li[class*='ReactionsMenuOption']) {
+	display: grid !important;
+	/* Keep two lines whether there are 6 or 8 reactions */
+	grid-template-rows: 1fr 1fr;
+	grid-auto-flow: column;
+
+	/* Move the popups */
+	/* Align the popups to the border + add 10px to make them overflow a bit */
+	/* Button on the top right of comments */
+	&.dropdown-menu-w {
+		/* Depends on the presence of `quick-comment-edit` */
+		translate: 107px -22px;
+	}
+
+	&.dropdown-menu-se {
+		/* Keep in view on mobile too */
+		/* https://github.com/refined-github/refined-github/issues/8605 */
+		translate: -28px -62px;
+	}
+
+	/* Button on the bottom left of comments */
+	&.dropdown-menu-ne {
+		translate: -27px 61px;
+	}
+}
+
+/* React Issue View */
+/* Specific :has() to exclude https://github.com/orgs/nodejs/projects/13/views/1?pane=issue&itemId=222267555&issue=nodejs%7Cuserland-migrations%7C520 */
+div[data-visibility-visible]:has(
+	> ul > li[class*='ReactionsMenuItem-module']
+) {
+	/* Reset the width */
+	min-width: 0 !important;
+
+	/* Center */
+	/* https://github.com/refined-github/refined-github/issues/8605 */
+	position-area: center;
+	top: auto;
+	left: auto;
+
+	/* Keep in view on mobile too */
+	translate: 6px;
+
+	/* Keep anchor direction static because now it overlaps the button */
+	/* https://github.com/refined-github/refined-github/pull/10166 */
+	position-try-fallbacks: none;
+
+	> ul {
+		display: grid !important;
+		/* Keep two lines whether there are 6 or 8 reactions */
+		grid-template-rows: 1fr 1fr;
+		grid-auto-flow: column;
+	}
+}
+/*
+
+Test URLs:
+
+- https://github.com/refined-github/sandbox/issues/3
+- https://github.com/refined-github/sandbox/pull/4
+- https://github.com/refined-github/sandbox/releases
+- https://github.com/vitest-dev/vitest/discussions/4631
+
+*/

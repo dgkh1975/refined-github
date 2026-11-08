@@ -1,19 +1,28 @@
-import React from 'dom-chef';
-import onetime from 'onetime';
 import {isEnterprise} from 'github-url-detection';
 
-import features from '.';
-import {getUsername} from '../github-helpers';
+import features from '../feature-manager.js';
+import {registerHotkey} from '../github-helpers/hotkey.js';
+import {getLoggedInUser} from '../github-helpers/index.js';
+import onetime from '../helpers/onetime.js';
 
-function init(): void {
-	const profileLink = (isEnterprise() ? location.origin : 'https://github.com') + '/' + getUsername()!;
-	document.body.append(<a hidden data-hotkey="g m" href={profileLink}/>);
+function initOnce(): void {
+	// This patterns also works on gist.github.com
+	const origin = isEnterprise() ? location.origin : 'https://github.com';
+	const profileLink = new URL(getLoggedInUser()!, origin);
+	registerHotkey('g m', profileLink.href);
 }
 
-void features.add(__filebasename, {
+void features.add(import.meta.url, {
 	shortcuts: {
 		'g m': 'Go to Profile',
 	},
-	awaitDomReady: false,
-	init: onetime(init),
+	init: onetime(initOnce),
 });
+
+/*
+
+Test URLs:
+
+1. Visit any page
+
+*/

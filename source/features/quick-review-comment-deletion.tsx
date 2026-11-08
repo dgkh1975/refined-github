@@ -1,52 +1,57 @@
+import delegate, {type DelegateEvent} from 'delegate-it';
 import React from 'dom-chef';
-import select from 'select-dom';
-import delegate from 'delegate-it';
-import {observe} from 'selector-observer';
-import {TrashIcon} from '@primer/octicons-react';
 import * as pageDetect from 'github-url-detection';
+import TrashIcon from 'octicons-plain-react/Trash';
+import {$, closestElement} from 'select-dom';
 
-import features from '.';
-import loadDetailsMenu from '../github-helpers/load-details-menu';
+import features from '../feature-manager.js';
+import loadDetailsMenu from '../github-helpers/load-details-menu.js';
+import showToast from '../github-helpers/toast.js';
+import observe from '../helpers/selector-observer.js';
 
-const deinit: VoidFunction[] = [];
-
-async function onButtonClick({delegateTarget: button}: delegate.Event): Promise<void> {
-	button
-		.closest('.js-comment')!
-		.querySelector('.show-more-popover .js-comment-delete > button')!
-		.click();
+function onButtonClick({delegateTarget: button}: DelegateEvent): void {
+	try {
+		closestElement('.js-comment', button)
+			.querySelector(':scope .show-more-popover .js-comment-delete > button')!
+			.click();
+	} catch (error) {
+		void showToast(new Error('Feature broken. Please open an issue with the link found in the console'));
+		throw error;
+	}
 }
 
-async function onEditButtonClick({delegateTarget: button}: delegate.Event): Promise<void> {
-	const comment = button.closest('.js-comment')!;
-	await loadDetailsMenu(select('details-menu.show-more-popover', comment)!);
+async function preloadDropdown({delegateTarget: button}: DelegateEvent): Promise<void> {
+	const comment = closestElement('.js-comment', button);
+	await loadDetailsMenu($('details-menu.show-more-popover', comment));
 }
 
 function addDeleteButton(cancelButton: Element): void {
-	cancelButton.classList.add('rgh-delete-button-added');
-	cancelButton.after(
-		<button className="btn btn-danger float-left rgh-review-comment-delete-button" type="button">
-			<TrashIcon/>
+	cancelButton.before(
+		<button className="btn btn-danger float-left mr-auto rgh-review-comment-delete-button" type="button">
+			<TrashIcon />
 		</button>,
 	);
 }
 
-function init(): void {
-	const listener = delegate(document, '.rgh-review-comment-delete-button', 'click', onButtonClick);
-	const editButtonListener = delegate(document, '.rgh-quick-comment-edit-button', 'click', onEditButtonClick);
-	const observer = observe('.review-comment > .unminimized-comment form:not(.js-single-suggested-change-form) .js-comment-cancel-button:not(.rgh-delete-button-added)', {
-		add: addDeleteButton,
-	});
-	deinit.push(listener.destroy, editButtonListener.destroy, observer.abort);
+function init(signal: AbortSignal): void {
+	delegate('.rgh-review-comment-delete-button', 'click', onButtonClick, {signal});
+	delegate('.rgh-quick-comment-edit-button', 'click', preloadDropdown, {signal});
+	observe('.review-comment .js-comment-cancel-button', addDeleteButton, {signal});
 }
 
-void features.add(__filebasename, {
+void features.add(import.meta.url, {
 	include: [
 		pageDetect.isPRConversation,
 		pageDetect.isPRFiles,
 	],
-	awaitDomReady: false,
-	deduplicate: 'has-rgh-inner',
 	init,
-	deinit,
 });
+
+/*
+
+Test URLs
+
+- https://github.com/refined-github/sandbox/pull/31
+- https://github.com/refined-github/sandbox/pull/31/files
+
+*/

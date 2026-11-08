@@ -1,27 +1,28 @@
+html:not([rgh-OFF-clean-conversation-sidebar]) {
+	div[class*='sidebarContent'] {
+		div[class*='SectionContainer'] {
+			/* Hide read-only empty sections */
+			&:has(span[class*='emptyText' i], [class*='developmentHelpText']):not(
+				:has(.octicon-gear)
+			),
+			/* Hide empty text in case section is not read-only */
+			:is(span[class*='emptyText' i], span[class*='developmentHelpText']):not(
+				:has(> button)
+			) {
+				display: none;
+			}
+		}
+	}
+}
+
+/* Legacy styles */
+
 /* Adjust spacing of empty sections */
 .discussion-sidebar-item.rgh-clean-sidebar {
 	margin-bottom: -5px;
 }
 
 /* Align sidebar to the top */
-.discussion-sidebar-item:first-child {
-	padding-top: 0;
-}
-
-.sidebar-labels .sidebar-labels-style:first-child {
-	margin-top: 0;
-}
-
-/* Move message under the `Unsubscribe` button above the button */
-.thread-subscription-status {
-	display: flex;
-	flex-direction: column;
-}
-
-form.thread-subscribe-form { /* `form` excludes the header */
-	order: 1;
-}
-
-.thread-subscription-status .reason {
-	margin: 0 0 10px !important;
+.rgh-clean-sidebar .discussion-sidebar-item:first-child {
+	padding-top: 0 !important;
 }

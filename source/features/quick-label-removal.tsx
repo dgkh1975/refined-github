@@ -1,0 +1,102 @@
+import './quick-label-removal.css';
+
+import delegate, {type DelegateEvent} from 'delegate-it';
+import React from 'dom-chef';
+import * as pageDetect from 'github-url-detection';
+import XIcon from 'octicons-plain-react/X';
+import {$, closestElement, elementExists} from 'select-dom';
+import {assertError} from 'ts-extras';
+
+import features from '../feature-manager.js';
+import api from '../github-helpers/api.js';
+import {getConversationNumber} from '../github-helpers/index.js';
+import showToast from '../github-helpers/toast.js';
+import observe from '../helpers/selector-observer.js';
+
+// Don't cache: https://github.com/refined-github/refined-github/issues/7283
+function canEditLabels(): boolean {
+	return elementExists('.label-select-menu .octicon-gear');
+}
+
+function getLabelList(): HTMLElement {
+	return $('.label-select-menu [src] .hx_rsm-content');
+}
+
+function restoreLabelList(): void {
+	const list = getLabelList();
+	list.replaceChildren(
+		<include-fragment src={closestElement('[src]', list).getAttribute('src')!} />,
+	);
+}
+
+function removeLabelList(): void {
+	const list = getLabelList();
+	closestElement('details', list).addEventListener('toggle', restoreLabelList, {once: true});
+	list.replaceChildren();
+}
+
+async function removeLabelButtonClickHandler(event: DelegateEvent<MouseEvent, HTMLButtonElement>): Promise<void> {
+	event.preventDefault();
+
+	const labelRemovalButton = event.delegateTarget;
+	const label = closestElement('a', labelRemovalButton);
+
+	try {
+		label.hidden = true;
+		// Disable dropdown list to avoid race conditions in the UI.
+		// Each deletion would be followed by a reload of the list _at the wrong time_
+		removeLabelList();
+
+		await api.v3(`issues/${getConversationNumber()!}/labels/${labelRemovalButton.dataset.name!}`, {
+			method: 'DELETE',
+		});
+	} catch (error) {
+		assertError(error);
+		void showToast(error);
+		labelRemovalButton.blur();
+		label.hidden = false;
+		return;
+	}
+
+	label.remove();
+}
+
+function addRemoveLabelButton(label: HTMLElement): void {
+	label.classList.add('d-inline-flex');
+	label.append(
+		<button
+			type="button"
+			className="btn-link rgh-quick-label-removal"
+			data-name={label.dataset.name}
+		>
+			<XIcon />
+		</button>,
+	);
+}
+
+async function init(signal: AbortSignal): Promise<void> {
+	delegate('.rgh-quick-label-removal:enabled', 'click', removeLabelButtonClickHandler, {signal});
+	observe('.js-issue-labels .IssueLabel', addRemoveLabelButton, {signal});
+}
+
+void features.add(import.meta.url, {
+	asLongAs: [
+		pageDetect.isConversation,
+		canEditLabels,
+	],
+	exclude: [
+		pageDetect.isArchivedRepo,
+	],
+	awaitDomReady: true, // The sidebar is near the end of the page
+	requiresToken: true,
+	init,
+});
+
+/*
+
+Test URLs:
+
+https://github.com/refined-github/refined-github/pull/3454
+https://github.com/refined-github/refined-github/issues/3440
+
+*/

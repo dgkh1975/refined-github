@@ -1,6 +1,14 @@
 import './clean-pinned-issues.css';
-import * as pageDetect from 'github-url-detection';
 
-import features from '.';
+import features from '../feature-manager.js';
 
-void features.addCssFeature(__filebasename, [pageDetect.isRepoIssueList], 'has-rgh-inner');
+void features.addCssFeature(import.meta.url);
+
+/*
+
+Test URLs:
+
+https://github.com/refined-github/sandbox/issues
+https://github.com/eslint/eslint/issues
+
+*/

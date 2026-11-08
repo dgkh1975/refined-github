@@ -1,163 +1,248 @@
+/* eslint-disable-next-line refined-github/css-documentation -- Global, no docs */
 :root {
-	--github-green: var(--color-success-fg, #1a7f37);
-	--github-red: var(--color-danger-fg, #cf222e);
-	--github-border-color: var(--color-border-muted, #d8dee4);
-}
+	--rgh-green: var(--fgColor-success, var(--color-success-fg, #1a7f37));
+	--rgh-red: var(--fgColor-danger, var(--color-danger-fg, #cf222e));
+	--rgh-yellow: var(--fgColor-attention, #c69026);
+	--rgh-border-color: var(
+		--borderColor-muted,
+		var(--color-border-muted, #d8dee4)
+	);
+	--rgh-border-outer-color: var(
+		--borderColor-default,
+		var(--color-border-default, #d1d9e0)
+	);
+	--rgh-background: var(--bgColor-default, var(--color-canvas-default, #fff));
 
-/* Make tab indented code more readable on GitHub and Gist */
-:root, /* GHE, drop in February 2022 */
-.comment-body [data-tab-size='8'] { /* User setting is ignored in comments #4833 */
-	--tab-size: 4;
-}
+	.rgh-bg-none {
+		background: none !important;
+	}
 
-* {
-	-moz-tab-size: var(--tab-size) !important;
-	tab-size: var(--tab-size) !important;
-}
+	.rgh-z-index-5 {
+		position: relative;
+		z-index: 5;
+	}
 
-/* For `open-all-selected` and `pr-filters`: set a reduced padding for all buttons for #1830 and #1904 */
-#js-issues-toolbar .table-list-header-toggle details {
-	padding: 0 !important;
-}
+	.rgh-display-contents {
+		display: contents !important;
+	}
 
-#js-issues-toolbar .table-list-header-toggle summary {
-	padding-left: 8px !important;
-	padding-right: 8px !important;
-}
-
-#js-issues-toolbar .table-list-header-toggle > :last-child > summary {
-	padding-right: 0 !important;
-}
-
-/* Hide empty description of repo */
-.repository-meta.mb-3 > .repository-meta-content > em {
-	display: none !important;
-}
-
-/* Remove user avatar from new comment form on threads */
-.review-thread-reply .avatar {
-	display: none;
-}
-
-.review-thread-reply .review-thread-reply-button {
-	margin-left: 0;
-}
-
-/* Hide `New pull request button` near file list */
-.file-navigation .new-pull-request-btn {
-	display: none;
-}
-
-@keyframes fade-in {
-	from {
-		opacity: 0%;
+	.rgh-anchored-link {
+		position: absolute !important;
+		position-area: center;
+		z-index: 2;
+		pointer-events: auto;
+		/* For debugging */
+		/* color: red !important; */
+	}
+	.rgh-hide-if-empty:empty {
+		display: none !important;
 	}
 }
 
-/* Smoothen mouse animation on 404 pages */
-.js-plaxify {
-	transition: transform 0.1s;
+/* For `open-all-selected` and `pr-filters`: set a reduced padding for all buttons */
+/* Info: https://github.com/refined-github/refined-github/issues/1830 */
+/* Info: https://github.com/refined-github/refined-github/issues/1904 */
+/* Test: https://github.com/refined-github/sandbox/pulls */
+#js-issues-toolbar .table-list-header-toggle {
+	details {
+		padding: 0 !important;
+	}
+
+	summary {
+		padding-left: 8px !important;
+		padding-right: 8px !important;
+	}
+
+	> :last-child > summary {
+		padding-right: 0 !important;
+	}
 }
 
-/* Remove "Seeing something unexpected?" from user profiles */
-#js-contribution-activity .js-show-more-timeline-form > p {
-	display: none;
-}
-
-/* Remove the 'Review Summary' header from the form */
-.pull-request-review-menu label[for='pull_request_review_body'] {
-	display: none !important;
+/* 404 page animation on load */
+/* Info: None, self-explanatory */
+/* Test: https://github.com/refined-github/refined-github/404 */
+[alt='404 “This is not the web page you are looking for”'] {
+	animation: fade-in 3s ease-out;
 }
 
 /* Lighten deletions in Markdown */
+/* Info: https://github.com/refined-github/refined-github/pull/958 */
+/* Test: https://github.com/refined-github/sandbox/issues/3 */
 .markdown-body del {
-	color: var(--color-text-tertiary, #6a737d);
+	color: var(--fgColor-muted, var(--color-fg-muted, fuchsia));
 }
 
-/* Expand PR merge status list to fit all items */
-:root .branch-action-item.open:not(.branch-action-item-simple) > .merge-status-list {
-	max-height: none;
-}
-
-/* Make <details> visibly clickable */
-.markdown-body summary, /* Summary elements are always clickable when present */
-.markdown-body details:not([open]) { /* Summary-less details have unselectable clickable elements */
-	cursor: pointer;
-}
-
-/* Remove the "New repository" button in the dashboard sidebar */
-.dashboard-sidebar a[href='/new'] {
-	display: none;
-}
-
-.dashboard-sidebar .Box-title {
-	padding-top: 4px !important;
-	padding-bottom: 4px !important;
-}
-
-/* Expand empty diffs in PRs */
-:root .file .data.empty {
-	padding: 54px;
-	text-align: center;
-}
-
-:root .file .data table {
-	text-align: left;
-}
-
+/* TODO [2027-01-01]: Drop after legacy PR files view is removed. Currently it only applies to `quick-comment-hiding` */
 /* Improve dropdown expansion animation (e.g. top-right dropdown in comments) */
 /* It normally pops in from the center */
+/* Info: https://github.com/refined-github/refined-github/pull/1715 */
+/* Test: https://github.com/refined-github/sandbox/pull/10#pullrequestreview-832816627 */
 .dropdown-menu-sw {
 	transform-origin: 90% top;
 }
 
-/* Improve spacing in conversation lists meta, made feel crowded by:
-highlight-collaborators-and-own-conversations
-parse-backticks
-pr-branches
-*/
-.js-issue-row .text-small.color-text-secondary {
-	line-height: 1.8;
-}
-
-/* Reset `vertical-align` for .octicons to work with above increased line-height */
-.js-issue-row .text-small.color-text-secondary .octicon {
-	vertical-align: middle;
-}
-
-/* Hide duplicate "You can also open this in GitHub Desktop" in PRs’ mergeability box */
-#partial-pull-merging .js-remove-unless-platform {
-	display: none;
-}
-
-/* Increase scrollable area in GitHub Actions #3591 */
-.WorkflowRunLogsScroll {
-	height: auto !important;
-}
-
-/* Keep diff stats in "Jump to" dropdown when the header is fixed #3925 */
+/* TODO [2027-01-01]: Drop after legacy PR files view is removed */
+/* Keep diff stats in "Jump to" dropdown when the header is fixed */
+/* Info: https://github.com/refined-github/refined-github/issues/3925 */
+/* Test: https://github.com/refined-github/refined-github/pull/3922/files */
 .select-menu-item-text .diffstat {
 	display: inline !important;
 }
 
-/* Style the "Find feature" dialog that appears on top of the page */
-#rgh-bisect-dialog {
-	position: fixed;
-	bottom: 50%;
-	right: 50%;
-	transform: translate(50%, 50%);
-	min-width: 380px; /* Avoids a width change on the last step which causes the YES button to be where NO was */
-	box-shadow: var(--color-toast-shadow);
-	z-index: 2147483647;
+/* Increase size of profile picture in user hovercard by 1.5x (default is 48px) */
+/* Info: https://github.com/refined-github/refined-github/issues/7695 */
+/* Test: https://github.com/refined-github/refined-github */
+.user-hovercard-avatar > img.d-block.avatar-user {
+	width: 72px;
+	height: 72px;
 }
 
-/* Space out "Edit" and "Open with" buttons on PR page, also for `view-last-pr-deployment` #4281 */
-.gh-header-actions [aria-label='Edit Pull Request title'] {
-	margin-left: 4px !important;
-	margin-right: 4px !important;
+/* TODO: Move to `release-download-count` after #9806 */
+/* Add hover effect to attachment row on the release page */
+/* Info: https://github.com/refined-github/refined-github/issues/8339 */
+/* Test: https://github.com/refined-github/refined-github/releases/tag/25.7.16 */
+@media (width >= 800px) {
+	.Box-footer
+		.Box--condensed
+		li:has(.octicon-package, .octicon-file-zip):hover {
+		background-color: var(--bgColor-muted, fuchsia);
+		&:first-of-type {
+			border-top-color: var(--borderColor-muted, fuchsia);
+		}
+	}
 }
 
-/* Remove the underline on PR filename copy button hover #4871 */
-.file-header .file-info clipboard-copy {
-	display: inline-block;
+/* Show PR reviews on mobile */
+/* Info: https://github.com/refined-github/refined-github/issues/9074 */
+/* Test (no CI checks): https://github.com/refined-github/sandbox/pulls?q=is%3Apr+review%3Aapproved */
+/* Test: https://github.com/refined-github/refined-github/pulls?q=is%3Apr+review%3Aapproved */
+@media (width <= 768px) {
+	.js-issue-row .markdown-title ~ .d-flex {
+		flex-direction: column;
+
+		.d-md-inline-flex {
+			display: inline-flex !important;
+			/* Hide [•] 1 review approval*/
+			font-size: 0;
+			a {
+				font-size: 12px;
+			}
+			.ml-1 {
+				margin-left: 0 !important;
+			}
+
+			/* Hide clock icon https://github.com/refined-github/refined-github/issues/9667 */
+			.issue-meta-section {
+				display: none;
+			}
+		}
+	}
+}
+
+/* TODO [2027-01-01]: Drop after repo PR list becomes exclusively React-based */
+/* Hide label on Milestones link if there are zero milestones */
+/* Info: https://github.com/refined-github/refined-github/issues/5120 */
+/* Test: https://github.com/refined-github/refined-github/pulls */
+[data-selected-links^='repo_milestones ']:has([title='0']) {
+	width: 36px; /* Size it so only the icon is visible */
+	overflow: hidden; /* Crop the text out */
+	padding-left: 10px;
+
+	svg {
+		margin-right: 20px; /* Push the text farther away from the text so it's cropped out */
+	}
+}
+
+/* Highlight sponsor label in comments */
+/* Info: https://github.com/refined-github/refined-github/issues/7293 */
+/* Test: https://github.com/fregante/webext-storage-cache/issues/19#issuecomment-653229351 */
+span[data-testid='sponsor-label'] {
+	color: #db61a2; /* Matches color-gh-sponsor. Also hardcoded in the SVG below */
+	&::before {
+		content: url('data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' fill=\'%23db61a2\' width=\'12\' height=\'12\' viewBox=\'0 0 16 16\'%3E%3Cpath d=\'M7.655 14.916zh-.002l-.006-.003-.018-.01a22 22 0 0 1-3.744-2.584C2.045 10.731 0 8.35 0 5.5 0 2.836 2.086 1 4.25 1 5.797 1 7.153 1.802 8 3.02 8.847 1.802 10.203 1 11.75 1 13.914 1 16 2.836 16 5.5c0 2.85-2.044 5.231-3.886 6.818a22 22 0 0 1-3.433 2.414 7 7 0 0 1-.31.17l-.018.01-.008.004a.75.75 0 0 1-.69 0\'/%3E%3C/svg%3E');
+		margin-top: 0.25em;
+		margin-right: 0.3em;
+	}
+}
+
+/* Make the "Symbolic link" more noticeable */
+/* Info: https://github.com/refined-github/refined-github/pull/9419#discussion_r3214988559 */
+/* Test: https://github.com/wmluke/angular-flash/blob/0.1.14/app/components */
+.react-code-size-details-in-header a[class*='PrimerLink'] {
+	color: var(--fgColor-accent, var(--color-accent-fg, fuchsia));
+	&:hover {
+		text-decoration: underline;
+	}
+}
+
+/* Hide the header logo on small screens */
+/* Info: https://github.com/refined-github/refined-github/issues/5120 */
+/* Test: https://github.com/refined-github/refined-github */
+@media (width <= 600px) {
+	a[class*='appHeaderHome'] {
+		display: none;
+	}
+}
+
+/* Highlight review type radio labels on hover to improve clickability */
+/* Info: https://github.com/refined-github/refined-github/issues/9447 */
+/* Test: https://github.com/refined-github/refined-github/pull/9611/changes (must exclude disabled choices) */
+fieldset[class*='RadioGroup'] {
+	[class*='FormControl-ControlHorizontalLayout'] {
+		z-index: 0;
+	}
+
+	[class*='LabelContainer'] {
+		flex-grow: 1;
+	}
+
+	label[data-component='FormControl.Label']:not([data-control-disabled]) {
+		position: relative;
+		&:hover::before {
+			content: '';
+			position: absolute;
+			z-index: -1;
+			inset: -5px;
+			left: -25px;
+			background-color: var(--control-transparent-bgColor-hover, fuchsia);
+			border-radius: var(--borderRadius-medium, 2em);
+		}
+	}
+}
+
+/* Make collapsed diffs more visually distinct */
+/* Info: https://github.com/refined-github/refined-github/issues/7338 */
+/* Test: https://github.com/refined-github/refined-github/pull/7212/changes */
+/* Test: https://github.com/refined-github/refined-github/pull/7212/changes/b6ef35a9811a5e32d1758a74db75459b028e49d0 */
+/* Test: https://github.com/refined-github/refined-github/commit/b6ef35a9811a5e32d1758a74db75459b028e49d0 */
+[class*='gridColumnTemplate'],
+/* "Binary not shown" */
+/* Info: https://github.com/refined-github/refined-github/issues/1630 */
+/* Test: https://togithub.com/JonathanSalwan/binary-samples/pull/9/changes */
+div[data-estimated-height='62'] .fgColor-muted {
+	margin-block: 6em;
+	text-align: center; /* Just for binaries */
+}
+
+/* Collapse Issue|PR|Repo buttons in headers for clarity */
+/* Info: https://github.com/refined-github/refined-github/issues/9674 */
+/* Test: https://github.com */
+div[data-testid='top-nav-right']
+	div.hide-sm.hide-md:has(> a > svg.octicon-repo) {
+	gap: 0;
+	a {
+		width: 2.1em;
+		&:nth-of-type(1) {
+			border-top-right-radius: 0;
+			border-bottom-right-radius: 0;
+		}
+		&:nth-of-type(2) {
+			border-radius: 0;
+			border-inline: none;
+		}
+		&:nth-of-type(3) {
+			border-top-left-radius: 0;
+			border-bottom-left-radius: 0;
+		}
+	}
 }

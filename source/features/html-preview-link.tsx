@@ -1,32 +1,53 @@
 import React from 'dom-chef';
-import select from 'select-dom';
 import * as pageDetect from 'github-url-detection';
 
-import features from '.';
+import features from '../feature-manager.js';
+import observe from '../helpers/selector-observer.js';
 
-const isSingleHTMLFile = (): boolean => pageDetect.isSingleFile() && /\.html?$/.test(location.pathname);
+const isSingleHtmlFile = (): boolean => pageDetect.isSingleFile() && /\.html?$/.test(location.pathname);
 
-function init(): void {
-	const rawButton = select('a#raw-url')!;
+function add(rawButton: HTMLAnchorElement): void {
+	if (!pageDetect.isPublicRepo()) {
+		return;
+	}
+
 	rawButton
+		.parentElement! // `div`
 		.parentElement! // `BtnGroup`
 		.prepend(
-			<a
-				className="btn btn-sm BtnGroup-item rgh-html-preview-link"
-				href={`https://refined-github-html-preview.kidonng.workers.dev${rawButton.pathname}`}
-			>
-				Preview
-			</a>,
+			<div className={rawButton.parentElement!.className}>
+				<a
+					className={rawButton.className}
+					data-variant="default"
+					data-size="small"
+					// #3305
+					href={`https://refined-github-html-preview.kidonng.workers.dev${rawButton.pathname}`}
+				>
+					Preview
+				</a>
+			</div>,
 		);
 }
 
-void features.add(__filebasename, {
+function init(signal: AbortSignal): void {
+	observe(['a#raw-url', 'a[data-testid="raw-button"]'], add, {signal});
+}
+
+void features.add(import.meta.url, {
 	include: [
-		isSingleHTMLFile,
+		isSingleHtmlFile,
 	],
 	exclude: [
 		pageDetect.isEnterprise,
 	],
-	deduplicate: '.rgh-html-preview-link', // #3945
 	init,
 });
+
+/*
+
+Test URLs:
+
+https://github.com/refined-github/sandbox/blob/html/preview-link/public/test.html
+https://github.com/CodingTrain/website/blob/4f90eedb9618257d9166241e92e51a7f3f00a08e/code_challenges/PerlinNoiseTerrain_p5.js/index.html
+
+*/

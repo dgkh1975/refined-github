@@ -1,23 +1,44 @@
-import delay from 'delay';
-import delegate from 'delegate-it';
-import loadImage from 'image-promise';
+import delegate, {type DelegateEvent} from 'delegate-it';
 
-import features from '.';
+import features from '../feature-manager.js';
+import delay from '../helpers/delay.js';
+import onetime from '../helpers/onetime.js';
 
-async function handleErroredImage({delegateTarget}: delegate.Event<ErrorEvent, HTMLImageElement>): Promise<void> {
+// Some images (e.g. 404 images) never load, retry each only once
+const retried = new WeakSet<HTMLImageElement>();
+
+async function handleErroredImage({delegateTarget}: DelegateEvent<ErrorEvent, HTMLImageElement>): Promise<void> {
+	if (retried.has(delegateTarget)) {
+		return;
+	}
+
+	retried.add(delegateTarget);
+	console.log('Refined GitHub: image failed loading, will retry', delegateTarget.src);
+
 	await delay(5000);
 	try {
 		// A clone image retries downloading
-		// `loadImage` awaits it
+		const cloned = delegateTarget.cloneNode();
+		await cloned.decode();
 		// If successfully loaded, the failed image will be replaced.
-		delegateTarget.replaceWith(await loadImage(delegateTarget.cloneNode()));
+		retried.add(cloned);
+		delegateTarget.replaceWith(cloned);
 	} catch {}
 }
 
-function init(): void {
-	delegate(document, 'img[src^="https://camo.githubusercontent.com/"]', 'error', handleErroredImage, true);
+function initOnce(): void {
+	delegate('img[src^="https://camo.githubusercontent.com/"]', 'error', handleErroredImage, {capture: true});
 }
 
-void features.add(__filebasename, {
-	init,
+void features.add(import.meta.url, {
+	init: onetime(initOnce),
 });
+
+/*
+
+Test URLs:
+
+1. https://github.com/refined-github/sandbox/blob/7416/7416.md
+2. See log in console
+
+*/

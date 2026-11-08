@@ -1,37 +1,51 @@
 import React from 'dom-chef';
-import select from 'select-dom';
+import {closestElementOptional} from 'select-dom';
 
-import features from '.';
-import {wrap, isEditable} from '../helpers/dom-utils';
+import features from '../feature-manager.js';
+import {wrap} from '../helpers/dom-utils.js';
+import onetime from '../helpers/onetime.js';
+import observe from '../helpers/selector-observer.js';
 
-function addLocation(baseElement: HTMLElement): void {
-	for (const {nextElementSibling, nextSibling} of select.all('.octicon-location', baseElement)) {
-		const location = nextElementSibling ?? nextSibling!; // `nextSibling` alone might point to an empty TextNode before an element, if there’s an element
-		if (isEditable(location)) {
-			continue;
-		}
+function addLocation({nextElementSibling, nextSibling}: SVGElement): Element {
+	// `nextSibling` alone might point to an empty TextNode before an element, if there’s an element
+	const userLocation = nextElementSibling ?? nextSibling as Element;
 
-		const locationName = location.textContent!.trim();
-		const googleMapsLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(locationName)}`;
+	const locationName = userLocation.textContent.trim();
+	const mapLink = `https://www.openstreetmap.org/search?query=${encodeURIComponent(locationName)}`;
 
-		location.before(' '); // Keeps the link’s underline from extending out to the icon
-		wrap(location, <a href={googleMapsLink}/>);
+	userLocation.before(' '); // Keeps the link’s underline from extending out to the icon
+	const link = <a className="Link--primary" href={mapLink} />;
+
+	if (closestElementOptional('.Popover', userLocation.parentElement!)) {
+		// Match the style of other links in the hovercard
+		link.classList.add('text-underline');
 	}
+
+	wrap(userLocation, link);
+
+	return link;
 }
 
-const hovercardObserver = new MutationObserver(([mutation]) => {
-	addLocation(mutation.target as HTMLElement);
-});
-
-function init(): void {
-	addLocation(document.body);
-
-	const hovercardContainer = select('.js-hovercard-content > .Popover-message');
-	if (hovercardContainer) {
-		hovercardObserver.observe(hovercardContainer, {childList: true});
-	}
+function initOnce(): void {
+	observe([
+		'[itemprop="homeLocation"] svg.octicon-location', // `isUserProfile`
+		'.pagehead .has-location svg.octicon-location', // `isOrganizationProfile`
+		'[aria-label="User location"] svg.octicon-location', // User hover cards
+		'[aria-label="Organization Hovercard"] svg.octicon-location', // Organization hover cards
+	], addLocation);
 }
 
-void features.add(__filebasename, {
-	init,
+void features.add(import.meta.url, {
+	// No `include` necessary
+	init: onetime(initOnce),
 });
+
+/*
+
+Test URLs
+
+- isUserProfile: https://github.com/mysticatea
+- isOrganizationProfile: https://github.com/github
+- Hover cards: https://github.com/
+
+*/

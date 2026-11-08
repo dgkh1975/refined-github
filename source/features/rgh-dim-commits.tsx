@@ -1,0 +1,44 @@
+import * as pageDetect from 'github-url-detection';
+import {closestElement} from 'select-dom';
+
+import features from '../feature-manager.js';
+import {isRefinedGitHubRepo} from '../github-helpers/index.js';
+import {commitTitleInLists} from '../github-helpers/selectors.js';
+import observe from '../helpers/selector-observer.js';
+
+// Source: https://github.com/fregante/release-with-changelog/blob/779fd5e658f82e5b11b1c0a352a6838d3bd8f67f/generate-release-notes.js#L6
+export const excludePreset = /^bump |^meta|^document|^lint|^refactor|readme|dependencies|^v?\d+\.\d+\.\d+/i;
+
+function dim(commitTitle: HTMLElement): void {
+	if (excludePreset.test(commitTitle.textContent.trim())) {
+		closestElement([
+			// `isCommitList`
+			'[data-testid="commit-row-item"]',
+			// `isCompare`
+			'.js-commits-list-item',
+		], commitTitle).style.opacity = '50%';
+	}
+}
+
+function init(signal: AbortSignal): void {
+	observe(commitTitleInLists, dim, {signal});
+}
+
+void features.add(import.meta.url, {
+	asLongAs: [
+		isRefinedGitHubRepo,
+	],
+	include: [
+		pageDetect.isCompare,
+		pageDetect.isCommitList,
+	],
+	init,
+});
+
+/*
+
+Test URLs:
+
+https://github.com/refined-github/refined-github/commits/98fb24e53704b436d68f254429885fb7bef09541/source/features/bypass-checks.tsx
+
+*/

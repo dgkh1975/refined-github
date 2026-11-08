@@ -1,24 +1,25 @@
-import onetime from 'onetime';
-import {observe} from 'selector-observer';
-import {applyToLink} from 'shorten-repo-url';
-import * as pageDetect from 'github-url-detection';
+import features from '../feature-manager.js';
+import {linkifiedUrlClass, shortenLink} from '../github-helpers/dom-formatters.js';
+import onetime from '../helpers/onetime.js';
+import observe from '../helpers/selector-observer.js';
 
-import features from '.';
-import {linkifiedURLClass} from '../github-helpers/dom-formatters';
-
-function init(): void {
-	observe(`a[href]:not(.${linkifiedURLClass})`, {
-		constructor: HTMLAnchorElement,
-		add(link) {
-			applyToLink(link, location.href);
-		},
-	});
+/* This feature is currently so broad that it's not de-inited via signal, it's just run once for all pageloads #5889 */
+function initOnce(): void {
+	observe([
+		`.comment-body a[href]:not(.${linkifiedUrlClass})`,
+		`.react-issue-comment .markdown-body a[href]:not(.${linkifiedUrlClass})`, // Issue comments
+		`.react-issue-body .markdown-body a[href]:not(.${linkifiedUrlClass})`, // First issue comment
+		`[data-testid="review-thread"] .markdown-body a[href]:not(.${linkifiedUrlClass})`, // React commit view
+	], shortenLink);
 }
 
-void features.add(__filebasename, {
-	exclude: [
-		// Due to GitHub’s bug: #2828
-		pageDetect.isGlobalSearchResults,
-	],
-	init: onetime(init),
+void features.add(import.meta.url, {
+	init: onetime(initOnce),
 });
+
+/*
+## Test URLs
+
+https://github.com/refined-github/sandbox/pull/14
+https://github.com/refined-github/refined-github/pull/473
+*/

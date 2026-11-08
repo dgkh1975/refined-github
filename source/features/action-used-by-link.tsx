@@ -1,32 +1,58 @@
 import React from 'dom-chef';
-import select from 'select-dom';
-import {SearchIcon} from '@primer/octicons-react';
 import * as pageDetect from 'github-url-detection';
+import SearchIcon from 'octicons-plain-react/Search';
+import {$, $$, closestElement} from 'select-dom';
 
-import features from '.';
+import features from '../feature-manager.js';
+import observe from '../helpers/selector-observer.js';
 
-function init(): void {
-	const actionRepo = select('aside .octicon-repo')!
-		.closest('a')!
-		.pathname
-		.slice(1);
+function getActionUrl(repoLink: HTMLAnchorElement): URL {
+	const actionRepo = repoLink.pathname.slice(1);
 
-	const actionURL = new URL('search', location.origin);
-	actionURL.searchParams.set('q', `${actionRepo} path:.github/workflows/ language:YAML`);
-	actionURL.searchParams.set('type', 'Code');
-	actionURL.searchParams.set('s', 'indexed');
-	actionURL.searchParams.set('o', 'desc');
+	const actionUrl = new URL('search', location.origin);
+	actionUrl.search = new URLSearchParams({
+		q: `${actionRepo} path:.github/workflows/ language:YAML`,
+		type: 'Code',
+		s: 'indexed',
+		o: 'desc',
+	}).toString();
 
-	select('.d-block.mb-2[href^="/contact"]')!.after(
-		<a href={String(actionURL)} className="d-block mb-2">
-			<SearchIcon width={14} className="color-text-primary mr-2"/>Usage examples
-		</a>,
-	);
+	return actionUrl;
 }
 
-void features.add(__filebasename, {
+function cleanElement(element: HTMLElement): void {
+	for (const child of $$(['[id]', '[aria-labelledby]'], element)) {
+		child.removeAttribute('id');
+		child.removeAttribute('aria-labelledby');
+	}
+}
+
+function addUsageLink(repoItem: HTMLElement): void {
+	const usageItem = repoItem.cloneNode(true);
+	cleanElement(usageItem);
+	const usageLink = $('a', usageItem);
+	usageLink.href = getActionUrl(usageLink).href;
+	$('[data-component="ActionList.Item.Label"]', usageItem).textContent = 'Usage examples';
+	$('[data-component="ActionList.LeadingVisual"]', usageItem).replaceChildren(<SearchIcon />);
+
+	closestElement('ul', repoItem).append(usageItem);
+}
+
+function init(signal: AbortSignal): void {
+	observe('[data-testid="resources"] [data-component="ActionList.Item"]:has(.octicon-repo)', addUsageLink, {signal});
+}
+
+void features.add(import.meta.url, {
 	include: [
 		pageDetect.isMarketplaceAction,
 	],
 	init,
 });
+
+/*
+
+Test URLs:
+
+https://github.com/marketplace/actions/title-replacer
+
+*/

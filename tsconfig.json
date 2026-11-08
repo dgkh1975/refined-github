@@ -1,16 +1,24 @@
 {
 	"extends": "@sindresorhus/tsconfig",
 	"compilerOptions": {
-		"target": "es2020",
-		"declaration": false,
-		"esModuleInterop": true,
+		"noEmit": true,
+		"jsx": "react",
 		"noUncheckedIndexedAccess": false,
-		"noPropertyAccessFromIndexSignature": false
+		"noPropertyAccessFromIndexSignature": false,
+		"exactOptionalPropertyTypes": false,
+		"lib": [
+			"DOM",
+			"ESNext" // Uint8Array.toBase64
+		],
+		"types": [
+			"chrome",
+			"vite/client"
+		]
 	},
 	"include": [
 		"source",
 		"test",
 		"build",
-		"webpack.config.ts"
+		"vite.config.ts"
 	]
 }

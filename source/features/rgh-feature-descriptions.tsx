@@ -1,61 +1,56 @@
-import React from 'dom-chef';
-import elementReady from 'element-ready';
+import delegate from 'delegate-it';
+import * as pageDetect from 'github-url-detection';
+import {mount, unmount} from 'svelte';
 
-import features from '.';
-import {wrapAll} from '../helpers/dom-utils';
+import features from '../feature-manager.js';
+import {isRefinedGitHubRepo} from '../github-helpers/index.js';
+import observe from '../helpers/selector-observer.js';
+import singleton from '../helpers/singleton.js';
+import {openInNewTab} from './prevent-comment-loss.js';
+import Description from './rgh-feature-descriptions.svelte';
 
-async function init(): Promise<void | false> {
-	const [, currentFeature] = /features\/([^.]+)/.exec(location.pathname)!;
-	const feature = features.meta.find(feature => feature.id === currentFeature);
-	if (!feature) {
-		return false;
-	}
-
-	const conversationsUrl = '/refined-github/refined-github/issues?q=' + encodeURIComponent(`"${feature.id}" sort:updated-desc`);
-
-	const commit = await elementReady([
-		'.Box-header.Details', // Already loaded
-		'include-fragment.commit-loader', // Deferred loading
-	].join(','));
-
-	const commitInfoBox = commit!.parentElement!;
-
-	commitInfoBox.classList.add('width-fit', 'min-width-0', 'flex-auto', 'mb-lg-0', 'mr-lg-3');
-	commitInfoBox.classList.remove('flex-shrink-0');
-
-	const featureInfoBox = (
-		<div className="Box rgh-feature-description" style={{flex: '0 1 544px'}}>
-			<div className="Box-row d-flex height-full">
-				{feature.screenshot && (
-					<a href={feature.screenshot} className="flex-self-center">
-						<img
-							src={feature.screenshot}
-							className="d-block border"
-							style={{
-								maxHeight: 100,
-								maxWidth: 150,
-							}}/>
-					</a>
-				)}
-				<div className={'flex-auto' + (feature.screenshot ? ' ml-3' : '')}>
-					{ /* eslint-disable-next-line react/no-danger */ }
-					<div dangerouslySetInnerHTML={{__html: feature.description}} className="text-bold"/>
-					<div className="no-wrap">
-						<a href={conversationsUrl} data-pjax="#repo-content-pjax-container">Conversations</a>
-					</div>
-				</div>
-			</div>
-		</div>
-	);
-
-	wrapAll([commitInfoBox, featureInfoBox], <div className="d-lg-flex"/>);
+function addDescription(anchor: HTMLElement): () => void {
+	const app = mount(Description, {target: anchor.parentElement!, anchor});
+	return () => {
+		void unmount(app);
+	};
 }
 
-void features.add(__filebasename, {
+function init(signal: AbortSignal): void {
+	observe('#repos-sticky-header', singleton(addDescription), {signal});
+}
+
+function initIssueForm(signal: AbortSignal): void {
+	observe('[data-testid="sidebar-assignees-section"]', addDescription, {signal});
+
+	// Avoid form content loss
+	delegate('.rgh-feature-description a', 'click', openInNewTab);
+}
+
+const featureUrlRegex = /^(?:[/]refined-github){2}[/]blob[/][^/]+[/]source[/]features[/][^.]+[.](?:tsx|css)$/;
+
+void features.add(import.meta.url, {
 	include: [
-		() => /refined-github\/blob\/.+?\/source\/features\/[\w.-]+$/.test(location.pathname),
+		() => featureUrlRegex.test(location.pathname),
 	],
-	awaitDomReady: false,
-	deduplicate: '.rgh-feature-description', // #3945
 	init,
+}, {
+	asLongAs: [
+		isRefinedGitHubRepo,
+		pageDetect.isNewIssue,
+		() => new URL(location.href).searchParams.get('template') === '1_bug_report.yml',
+	],
+	init: initIssueForm,
 });
+
+/*
+
+## Test URLs
+
+- Regular feature: https://github.com/refined-github/refined-github/blob/main/source/features/align-issue-labels.tsx
+- CSS counterpart: https://github.com/refined-github/refined-github/blob/main/source/features/align-issue-labels.css
+- CSS-only feature: https://github.com/refined-github/refined-github/blob/main/source/features/reactions-popup.css
+- RGH feature: https://github.com/refined-github/refined-github/blob/main/source/features/rgh-feature-descriptions.css
+- Removed feature: https://github.com/refined-github/refined-github/blob/55dfdfd903bd7d36e0c2f3dc46847bddc73544f5/source/features/latest-tag-button.tsx
+- Bug report: https://github.com/refined-github/refined-github/issues/new?template=1_bug_report.yml&title=%60open-all-conversations%60%3A+Expected+elements
+*/

@@ -1,9 +1,10 @@
-/* Align right */
-.js-notifications-mark-selected-actions ~ .rgh-open-notifications-button {
-	margin-left: auto;
+/* Only show "Open all unread" if no notifications are selected */
+.js-notifications-mark-selected-actions[hidden]
+	~ .rgh-open-notifications-button {
+	display: inline-block !important;
 }
 
-/* Hide main button when user has selected some notifications */
-.js-notifications-mark-selected-actions:not([hidden]) ~ .rgh-open-notifications-button {
-	display: none;
+/* Add margin just in case the user has disabled `notifications-ui`, which drops the margin-less dropdown button */
+.dropdown + .rgh-open-selected-button {
+	margin-left: 8px;
 }

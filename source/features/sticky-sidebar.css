@@ -1,24 +1,34 @@
-#js-repo-pjax-container .pagehead ul.pagehead-actions {
-	z-index: initial; /* This affects the social buttons. It seems to have no effect but it constantly causes trouble with other features. */
+/*
+Have the calculations available even when the sidebar isn't sticky so that `--rgh-sticky-sidebar-offset` can be used via JS.
+
+Exclusively use simple sums and use `0px` instead of `0`
+*/
+.application-main {
+	--rgh-sticky-header-height: 70px; /* 60px plus some padding */
+	--rgh-sticky-sidebar-offset: calc(
+		var(--rgh-sticky-header-height, 0px) +
+			var(--rgh-sticky-notification-header-height, 0px)
+	);
+}
+
+/* `isRepoRoot` */
+div[class^='prc-PageLayout-Pane']:has(
+	> rails-partial[data-partial-name='codeViewRepoRoute.Sidebar']
+) {
+	--rgh-sticky-sidebar-offset: 0;
+}
+
+.notification-shelf ~ .application-main {
+	/* It needs to be on the same element as above for calc() to work */
+	--rgh-sticky-notification-header-height: 69px;
 }
 
 .rgh-sticky-sidebar {
 	position: sticky;
-	top: 0;
+	top: var(--rgh-sticky-sidebar-offset, 0) !important;
 
-	/* `sticky` will trap the `fixed` dialog’s z-index in some sidebars #3732 */
-	/* Higher than sticky readme header #4192 */
-	z-index: 90;
-}
-
-#partial-discussion-sidebar.rgh-sticky-sidebar {
-	top: 76px !important; /* Sticky header's height + sidebar item's margin */
-
-	/* Needed so the backdrop of notification modal is over the other elements in the conversation */
-	z-index: 1;
-}
-
-/* Hides the last divider (on pull requests) to avoid https://user-images.githubusercontent.com/10238474/62282128-af6fb980-b457-11e9-8b18-c29687b88da1.gif */
-.rgh-sticky-sidebar + .border-top {
-	display: none;
+	/* Higher than sticky readme header https://github.com/refined-github/refined-github/issues/8462 */
+	&:has(.details-overlay[open]) {
+		z-index: 90;
+	}
 }

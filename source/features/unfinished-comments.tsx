@@ -1,37 +1,62 @@
-import select from 'select-dom';
+import delegate from 'delegate-it';
 import * as pageDetect from 'github-url-detection';
+import {$$optional} from 'select-dom';
 
-import features from '.';
+import features from '../feature-manager.js';
 
-let documentTitle: string | undefined;
+let submitting: ReturnType<typeof setTimeout> | undefined;
+
+const prefix = '✏️ Comment - ';
+
+function isFieldDirty(field: HTMLTextAreaElement): boolean {
+	return field.matches('[class*="Textarea"]')
+		? field.value.length > 0 // React fields update both value and textContent, so default to "filled === dirty"
+		: field.value !== field.textContent;
+}
 
 function hasDraftComments(): boolean {
-	// `[disabled]` excludes the PR description field that `wait-for-build` disables while it waits
 	// `[id^="convert-to-issue-body"]` excludes the hidden pre-filled textareas created when opening the dropdown menu of review comments
-	return select.all('textarea:not([disabled], [id^="convert-to-issue-body"])').some(textarea =>
-		textarea.value !== textarea.textContent // Exclude comments being edited but not yet changed (and empty comment fields)
-		&& !select.exists('.btn-primary[disabled]', textarea.form!), // Exclude forms being submitted
-	);
+	return $$optional('textarea:not([id^="convert-to-issue-body"])').some(f => isFieldDirty(f));
+}
+
+function disableOnSubmit(): void {
+	clearTimeout(submitting);
+	submitting = setTimeout(() => {
+		submitting = undefined;
+	}, 2000);
 }
 
 function updateDocumentTitle(): void {
-	if (document.visibilityState === 'hidden' && hasDraftComments()) {
-		documentTitle = document.title;
-		document.title = '(Draft comment) ' + document.title;
-	} else if (documentTitle) {
-		document.title = documentTitle;
-		documentTitle = undefined;
+	if (submitting) {
+		return;
 	}
+
+	// Ensure it does not pile up
+	document.title = document.title.replace(prefix, '');
+
+	document.title = document.visibilityState === 'hidden' && hasDraftComments()
+		? prefix + document.title
+		: document.title.replace(prefix, '');
 }
 
-function init(): void {
-	document.addEventListener('visibilitychange', updateDocumentTitle);
+function init(signal: AbortSignal): void {
+	delegate('form', 'submit', disableOnSubmit, {capture: true, signal});
+	document.addEventListener('visibilitychange', updateDocumentTitle, {signal});
 }
 
-void features.add(__filebasename, {
+void features.add(import.meta.url, {
 	include: [
 		pageDetect.hasRichTextEditor,
 	],
-	deduplicate: 'has-rgh-inner',
 	init,
 });
+
+/*
+
+Test URLs:
+
+https://github.com/refined-github/sandbox/pull/4
+https://github.com/refined-github/sandbox/pull/4/changes
+https://github.com/refined-github/sandbox/issues/3
+
+*/

@@ -1,30 +1,67 @@
-import select from 'select-dom';
+import delegate, {type DelegateEvent} from 'delegate-it';
 import * as pageDetect from 'github-url-detection';
+import {$} from 'select-dom';
 
-import features from '.';
+import features from '../feature-manager.js';
+import {codeSearchHeader} from '../github-helpers/selectors.js';
+import {wasInteractiveElementClicked} from './easy-toggle-commit-messages.js';
 
-function toggleFile(event: MouseEvent): void {
+function toggleFile(event: DelegateEvent<MouseEvent>): void {
+	if (wasInteractiveElementClicked(event)) {
+		return;
+	}
+
+	const headerBar = event.delegateTarget;
+	$('button:has(> .octicon-chevron-down, > .octicon-chevron-right)', headerBar)
+		.dispatchEvent(new MouseEvent('click', {bubbles: true, altKey: event.altKey}));
+}
+
+function toggleCodeSearchFile(event: DelegateEvent<MouseEvent>): void {
 	const elementClicked = event.target as HTMLElement;
-	const headerBar = elementClicked.closest<HTMLElement>('.file-header')!;
+	const headerBar = event.delegateTarget;
+	const toggle = $(':scope > button', headerBar);
 
-	// The clicked element is either the bar itself or one of its 2 children
-	if (elementClicked === headerBar || elementClicked.parentElement === headerBar) {
-		select('[aria-label="Toggle diff contents"]', headerBar)!
-			.dispatchEvent(new MouseEvent('click', {bubbles: true, altKey: event.altKey}));
+	// The clicked element is either the bar itself or one of its children excluding the button
+	if (elementClicked === headerBar || (elementClicked !== toggle && elementClicked.parentElement === headerBar)) {
+		toggle.dispatchEvent(new MouseEvent('click', {bubbles: true, altKey: event.altKey}));
 	}
 }
 
-async function init(): Promise<void> {
-	document.body.addEventListener('click', toggleFile);
+function init(signal: AbortSignal): void {
+	delegate(
+		[
+			'.file-header',
+			// React
+			'[class*="diffHeaderWrapper"]',
+		],
+		'click',
+		toggleFile,
+		{signal},
+	);
 }
 
-void features.add(__filebasename, {
+function initSearchPage(signal: AbortSignal): void {
+	delegate(codeSearchHeader, 'click', toggleCodeSearchFile, {signal});
+}
+
+void features.add(import.meta.url, {
 	include: [
-		pageDetect.isPRFiles,
-		pageDetect.isCommit,
-		pageDetect.isCompare,
+		pageDetect.hasFiles,
+		pageDetect.isGistRevision,
 	],
-	awaitDomReady: false,
-	deduplicate: 'has-rgh-inner',
 	init,
+}, {
+	include: [
+		pageDetect.isGlobalSearchResults,
+	],
+	init: initSearchPage,
 });
+
+/*
+
+## Test URLs
+
+- Pull Request: https://github.com/refined-github/refined-github/pull/7036/files
+- Code Search: https://github.com/search?q=repo%3Arefined-github%2Frefined-github%20easy&type=code
+
+*/

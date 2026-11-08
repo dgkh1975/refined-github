@@ -1,64 +1,116 @@
+import './default-branch-button.css';
+
 import React from 'dom-chef';
-import elementReady from 'element-ready';
 import * as pageDetect from 'github-url-detection';
-import {ChevronLeftIcon} from '@primer/octicons-react';
+import memoize from 'memoize';
+import ChevronLeftIcon from 'octicons-plain-react/ChevronLeft';
+import {$optional} from 'select-dom';
 
-import features from '.';
-import GitHubURL from '../github-helpers/github-url';
-import {groupButtons} from '../github-helpers/group-buttons';
-import getDefaultBranch from '../github-helpers/get-default-branch';
-import {getCurrentCommittish} from '../github-helpers';
+import {withTooltipRef} from '../components/tooltip.js';
+import features from '../feature-manager.js';
+import getDefaultBranch from '../github-helpers/get-default-branch.js';
+import GitHubFileUrl from '../github-helpers/github-file-url.js';
+import {groupButtons} from '../github-helpers/group-buttons.js';
+import {fixFileHeaderOverlap, isRepoCommitListRoot} from '../github-helpers/index.js';
+import isDefaultBranch from '../github-helpers/is-default-branch.js';
+import {branchSelector} from '../github-helpers/selectors.js';
+import {getIdentifiers} from '../helpers/feature-helpers.js';
+import observe from '../helpers/selector-observer.js';
 
-async function init(): Promise<false | void> {
-	const defaultBranch = await getDefaultBranch();
-	const branchSelector = await elementReady('[data-hotkey="w"]');
-	// The branch selector is missing from History pages of files and folders (it only appears on the root)
-	if (!branchSelector) {
-		return false;
-	}
+export const buttonGroup = getIdentifiers('default-branch-button-group');
 
-	const currentBranch = getCurrentCommittish();
-
-	// Don't show the button if we’re already on the default branch
-	if (defaultBranch === currentBranch) {
-		return false;
-	}
-
-	const url = new GitHubURL(location.href);
+const getUrl = memoize(async (currentUrl: string): Promise<string> => {
+	const defaultUrl = new GitHubFileUrl(currentUrl);
 	if (pageDetect.isRepoRoot()) {
 		// The default branch of the root directory is just /user/repo/
-		url.route = '';
-		url.branch = '';
+		defaultUrl.route = '';
+		defaultUrl.branch = '';
 	} else {
-		url.branch = defaultBranch;
+		defaultUrl.branch = await getDefaultBranch();
+	}
+
+	return defaultUrl.href;
+});
+
+async function updateUrl({currentTarget: link}: React.MouseEvent<HTMLAnchorElement>): Promise<void> {
+	link.href = await getUrl(location.href);
+}
+
+function wrapButtons(buttons: HTMLElement[]): void {
+	groupButtons(buttons, 'd-flex', buttonGroup.class);
+
+	// `rounded-left-0` is for Firefox
+	// https://github.com/refined-github/refined-github/pull/8030
+	buttons.at(-1)!.classList.add('rounded-left-0');
+}
+
+async function add(branchSelectorElement: HTMLElement): Promise<void> {
+	// The DOM varies between details-based DOM and React-based one
+	const selectorWrapper = branchSelectorElement.tagName === 'SUMMARY'
+		? branchSelectorElement.parentElement!
+		: branchSelectorElement;
+	selectorWrapper.classList.add('rgh-highlight-non-default-branch');
+
+	const existingLink = $optional('.rgh-default-branch-button', branchSelectorElement.parentElement!);
+
+	// React issues. Duplicates appear after a color scheme update
+	// https://github.com/refined-github/refined-github/issues/7098
+	if (existingLink) {
+		// Border radius style is removed by the color scheme update
+		wrapButtons([existingLink, selectorWrapper]);
+		return;
+	}
+
+	if (pageDetect.isSingleFile()) {
+		fixFileHeaderOverlap(branchSelectorElement);
 	}
 
 	const defaultLink = (
 		<a
-			className="btn tooltipped tooltipped-ne rgh-default-branch-button"
-			href={String(url)}
-			data-pjax="#repo-content-pjax-container"
-			aria-label="See this view on the default branch"
+			ref={withTooltipRef({label: 'View on the default branch', direction: 'se'})}
+			className="btn px-2 tmp-px-2 rgh-default-branch-button flex-self-start"
+			href={await getUrl(location.href)}
+			// Update on hover because the URL may change without a DOM refresh
+			// https://github.com/refined-github/refined-github/issues/6554
+			// Inlined listener because `mouseenter` is too heavy for `delegate`
+			onMouseEnter={updateUrl}
+			// Don't enable AJAX on this behavior because we need a full page reload to drop the button, same reason as above #6554
+			// data-turbo-frame="repo-content-turbo-frame"
 		>
-			<ChevronLeftIcon/>
+			<ChevronLeftIcon />
 		</a>
 	);
 
-	branchSelector.parentElement!.before(defaultLink);
-	branchSelector.parentElement!.style.zIndex = 'auto'; // For #4240
-	groupButtons([defaultLink, branchSelector.parentElement!]).classList.add('d-flex');
+	selectorWrapper.before(defaultLink);
+	wrapButtons([defaultLink, selectorWrapper]);
 }
 
-void features.add(__filebasename, {
+async function init(signal: AbortSignal): Promise<void> {
+	observe(branchSelector, add, {signal});
+}
+
+void features.add(import.meta.url, {
 	include: [
 		pageDetect.isRepoTree,
 		pageDetect.isSingleFile,
-		pageDetect.isRepoCommitList,
+		isRepoCommitListRoot,
 	],
 	exclude: [
-		pageDetect.isRepoHome,
+		isDefaultBranch,
 	],
-	awaitDomReady: false,
-	deduplicate: '.rgh-default-branch-button', // #3945
+	requiresToken: true,
 	init,
 });
+
+/*
+
+Test URLs:
+
+- isRepoTree https://github.com/refined-github/refined-github/tree/07ecc75
+- isSingleFile, 410 Gone from default branch https://github.com/refined-github/refined-github/blob/07ecc75/extension/content.js
+- isRepoCommitList: https://github.com/refined-github/refined-github/commits/07ecc75/
+- isRepoCommitList (already on default branch): https://github.com/typed-ember/ember-cli-typescript/commits/master
+- isRepoCommitListRoot (no branch selector): https://github.com/refined-github/refined-github/commits/07ecc75/extension
+- `isRepoHome`, long branch name: https://github.com/refined-github/sandbox/tree/very-very-long-long-long-long-branch-name
+
+*/

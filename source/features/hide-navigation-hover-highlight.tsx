@@ -1,18 +1,28 @@
 import './hide-navigation-hover-highlight.css';
-import onetime from 'onetime';
 
-import features from '.';
+import features from '../feature-manager.js';
 
-const className = 'rgh-no-navigation-highlight';
+const attribute = 'rgh-no-navigation-highlight';
+const html = document.documentElement;
 
 function init(): void {
-	document.body.classList.add(className);
-	document.body.addEventListener('navigation:keydown', () => {
-		document.body.classList.remove(className);
+	html.setAttribute(attribute, '');
+	html.addEventListener('navigation:keydown', () => {
+		html.removeAttribute(attribute);
 	}, {once: true});
 }
 
-void features.add(__filebasename, {
-	awaitDomReady: false,
-	init: onetime(init),
+void features.add(import.meta.url, {
+	init,
 });
+
+/*
+
+Test URLs
+
+- Notifications list: https://github.com/notifications
+- Issue list: https://github.com/refined-github/refined-github/issues
+- React file list: https://github.com/refined-github/refined-github/tree/main/.github
+- File list: https://github.com/refined-github/refined-github
+
+*/

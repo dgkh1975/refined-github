@@ -1,4 +1,12 @@
-.rgh-hide-diff-signs .blob-code-inner::before, /* Inline review blocks in PRs */
-.rgh-hide-diff-signs .blob-code-marker-cell::before { /* Commit page */
-	visibility: hidden;
+html:not([rgh-OFF-hide-diff-signs]) {
+	:is(
+		/* Edit page, probably upcoming DOM everywhere */
+		.diff-text-cell .diff-text,
+		.blob-code-inner /* Inline review blocks in PRs */,
+		.blob-code-marker-cell /* Commit page */
+	)::before,
+	/* React commit page */
+	.diff-text-marker {
+		visibility: hidden;
+	}
 }

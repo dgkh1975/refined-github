@@ -1,46 +1,93 @@
-/* Changes the layout of pinned issues from side-by-side to a standard list. */
-.rgh-clean-pinned-issues .js-pinned-issues-reorder-container .f4 {
-	display: none !important; /* Hide title */
-}
+html:not([rgh-OFF-clean-pinned-issues]) {
+	@media (width >= 700px) {
+		div[class*='FilterContainer'] {
+			container-type: inline-size;
+		}
 
-@media (min-width: 700px) {
-	.rgh-clean-pinned-issues .js-pinned-issues-reorder-list {
-		display: table !important;
-		width: 100%;
-		margin: 0;
-		margin-bottom: 20px;
+		/* Pinned issues list */
+		ul[aria-label='Drag and drop pinned issues list.'] {
+			display: table !important;
+			/* Avoid overflow https://github.com/refined-github/refined-github/issues/9683 */
+			width: 100%;
+			/* eslint-disable-next-line cssicorn/no-deprecated-features -- Not equivalent */
+			word-break: break-word;
 
-		/* Rounded table border https://stackoverflow.com/a/2586780/288906 */
-		box-shadow: 0 0 0 2px var(--github-border-color);
-		border-collapse: collapse;
-		border-radius: 6px;
-		border-style: hidden;
-	}
+			/* Rounded table border https://stackoverflow.com/a/2586780/288906 */
+			box-shadow: 0 0 0 1px var(--rgh-border-outer-color, fuchsia);
+			border-collapse: collapse;
+			border-radius: 6px;
+			border-style: hidden;
 
-	.rgh-clean-pinned-issues .pinned-issue-item {
-		display: table-row !important;
-		border-color: var(--github-border-color) !important;
-	}
+			/* Individual pinned issue rows */
+			> li {
+				display: table-row !important;
+				border-color: var(--rgh-border-color, fuchsia) !important;
 
-	.rgh-clean-pinned-issues .pinned-issue-item > * {
-		display: table-cell !important;
-		padding: 6px 12px;
-		vertical-align: middle;
-	}
+				/* Inner grid wrapper */
+				> div.position-relative {
+					display: contents;
+				}
+			}
 
-	/* Move `x` before the title and align both icons */
-	.rgh-clean-pinned-issues .pinned-issue-item > :first-child {
-		display: flex !important;
-	}
+			/* Drag handle / issue container */
+			div[class*='PinnedIssueContainer'] {
+				padding: 4px 8px !important;
+				display: table-cell;
+				vertical-align: top;
+			}
 
-	.rgh-clean-pinned-issues .pinned-issue-handle {
-		order: -1;
-		margin-top: -2px;
-	}
+			/* Issue content */
+			div[class*='contentContainer'] {
+				display: flex;
+				flex-direction: row;
+				align-items: flex-start;
+			}
 
-	.rgh-clean-pinned-issues .pinned-issue-item form button {
-		float: unset !important;
-		margin-left: -10px;
-		margin-right: 2px !important;
+			/* Status icon */
+			span[class*='Octicon'] {
+				vertical-align: text-bottom;
+				margin-left: -1.5em;
+				/* Pull icon a bit lower to align with the title */
+				line-height: 1.3;
+			}
+
+			/* Prevent title wrapping below the status icon */
+			a[class*='Link__'] {
+				padding-left: 1.5em;
+			}
+
+			/* Move options button to the end if GitHub renders one here */
+			div[class*='titleOptionsContainer'] {
+				display: contents;
+
+				> button {
+					order: 1;
+
+					/* Optically align the button to the title so it's not too near the border */
+					margin-top: 6px;
+				}
+			}
+
+			/* Metadata */
+			div[class*='metadataContainer'] {
+				text-align: end;
+				margin-left: 8px;
+				line-height: 1.2;
+
+				/* Since it grows, the content should still be aligned right */
+				justify-content: flex-end;
+
+				/* Align content to the top when the title wraps */
+				align-items: flex-start;
+
+				/* Optically align the metadata to the title so it's not too near the border */
+				padding-top: 11px;
+
+				/* Hide "opened" */
+				[data-hovercard-type='user'] + span {
+					display: none;
+				}
+			}
+		}
 	}
 }

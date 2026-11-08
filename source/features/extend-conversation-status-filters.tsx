@@ -1,71 +1,71 @@
-import React from 'dom-chef';
-import select from 'select-dom';
-import {CheckIcon} from '@primer/octicons-react';
-import elementReady from 'element-ready';
 import * as pageDetect from 'github-url-detection';
+import {$, $$} from 'select-dom';
 
-import features from '.';
-import SearchQuery from '../github-helpers/search-query';
+import features from '../feature-manager.js';
+import SearchQuery from '../github-helpers/search-query.js';
+import observe from '../helpers/selector-observer.js';
 
-function addMergeLink(): void {
-	if (!pageDetect.isPRList()) {
+const mergedLinkClass = 'rgh-merged-link';
+
+function addMergeLink(link: HTMLAnchorElement): void {
+	// In this case, `link` is expected to be a "Closed" link
+	// Null if the "Merged" link hasn't been added yet
+	const hasMergeLink = link.nextElementSibling?.classList.contains(mergedLinkClass);
+	if (
+		hasMergeLink!
+		|| !SearchQuery.from(link).includes('is:closed', 'state:closed')
+		|| link.classList.contains(mergedLinkClass)
+	) {
 		return;
 	}
 
-	// The links in `.table-list-header-toggle` are either:
-	//   1 Open | 1 Closed
-	//   1 Total            // Apparently appears with is:merged/is:unmerged
-	for (const lastLink of select.all('.table-list-header-toggle.states a:last-child')) {
-		const lastLinkQuery = new SearchQuery(lastLink);
+	const mergeLink = link.cloneNode(true);
+	mergeLink.classList.add(mergedLinkClass);
+	$('[class*="title"]', mergeLink).textContent = 'Merged';
+	// The counter would be the one of the closed PRs
+	for (const counter of $$(['[class*="count"]', '[class*="VisuallyHidden"]'], mergeLink)) {
+		counter.remove();
+	}
 
-		if (lastLinkQuery.includes('is:merged')) {
-			// It's a "Total" link for "is:merged"
-			lastLink.lastChild!.textContent = lastLink.lastChild!.textContent!.replace('Total', 'Merged');
-			continue;
-		}
+	mergeLink.href = SearchQuery.from(mergeLink).replace(/(?:is|state):closed/, 'state:merged').href;
+	link.after(mergeLink);
+}
 
-		if (lastLinkQuery.includes('is:unmerged')) {
-			// It's a "Total" link for "is:unmerged"
-			lastLink.lastChild!.textContent = lastLink.lastChild!.textContent!.replace('Total', 'Unmerged');
-			continue;
-		}
+function updateResultsCount(count: HTMLElement): void {
+	const locationQuery = SearchQuery.from(location);
 
-		// In this case, `lastLink` is expected to be a "Closed" link
-		const mergeLink = lastLink.cloneNode(true);
-		mergeLink.textContent = 'Merged';
-		mergeLink.classList.toggle('selected', new SearchQuery(location.search).includes('is:merged'));
-		new SearchQuery(mergeLink).replace('is:closed', 'is:merged');
-		lastLink.after(' ', mergeLink);
+	// The header is either:
+	//   Open | Closed      // Links
+	//   1 results          // Apparently appears with merged/unmerged filters, in place of the links
+	if (locationQuery.includes('is:merged', 'state:merged')) {
+		count.textContent = count.textContent.replace('results', 'merged');
+		return;
+	}
+
+	if (locationQuery.includes('is:unmerged', '-state:merged')) {
+		count.textContent = count.textContent.replace('results', 'unmerged');
 	}
 }
 
-function togglableFilters(): void {
-	for (const link of select.all('.table-list-header-toggle.states a')) {
-		select('.octicon', link)?.remove();
-		if (link.classList.contains('selected')) {
-			link.prepend(<CheckIcon/>);
-			new SearchQuery(link).remove(
-				'is:open',
-				'is:closed',
-				'is:merged',
-				'is:unmerged',
-			);
-		}
-	}
+function init(signal: AbortSignal): void {
+	// The Open/Closed links in the header of the list
+	observe('[class*="elementContainer"] > a[class*="container"][href*="state%3A"]', addMergeLink, {signal});
+	observe('[data-testid="results-count"]', updateResultsCount, {signal});
 }
 
-async function init(): Promise<void | false> {
-	await elementReady('.table-list-filters');
-
-	addMergeLink();
-	togglableFilters();
-}
-
-void features.add(__filebasename, {
+void features.add(import.meta.url, {
 	include: [
-		pageDetect.isConversationList,
+		pageDetect.isPRList,
 	],
-	awaitDomReady: false,
-	deduplicate: 'has-rgh-inner',
 	init,
 });
+
+/*
+
+Test URLs:
+
+- Regular: https://github.com/refined-github/refined-github/pulls
+- "Merged" view: https://github.com/refined-github/refined-github/pulls?q=is%3Apr+sort%3Aupdated-desc+state%3Amerged
+- "Unmerged" view: https://github.com/refined-github/refined-github/pulls?q=is%3Apr+sort%3Aupdated-desc+-state%3Amerged
+
+*/

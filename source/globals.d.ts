@@ -1,51 +1,65 @@
-/* eslint-disable @typescript-eslint/consistent-indexed-object-style */
+/* eslint-disable @typescript-eslint/naming-convention -- Declaration merging */
+/* eslint-disable @typescript-eslint/consistent-type-definitions -- Declaration merging */
+
+declare module '*.svelte';
+declare module '*.css';
+declare module '*.gql' {
+	export = string;
+}
+declare module '*.svg' {
+	export = string;
+}
 
 type AnyObject = Record<string, any>;
-
-type FeatureID = 'use the __filebasename variable';
+type FeatureId = string & {feature: true};
 interface FeatureMeta {
-	id: FeatureID;
+	id: FeatureId;
 	description: string;
-	screenshot?: string;
+	screenshot: string | null; // eslint-disable-line @typescript-eslint/no-restricted-types -- We use `null` in the JSON file
+	css?: true;
+	cssOnly?: true;
 }
 
-declare const __features__: FeatureID[];
-declare const __featuresMeta__: FeatureMeta[];
-declare const __filebasename: FeatureID;
+type Not<Yes, No> = Yes extends No ? never : Yes;
+type UnslashedString<S extends string> = Not<S, `/${string}` | `${string}/`>;
 
-interface Window {
-	content: GlobalFetch;
+// These types are unnecessarily loose
+// https://dom.spec.whatwg.org/#dom-node-textcontent
+interface ChildNode {
+	textContent: string;
+}
+interface Text {
+	textContent: string;
+}
+interface Element {
+	textContent: string;
 }
 
-declare module 'markdown-wasm/dist/markdown.node.js';
-
-declare module 'size-plugin';
-
-// Custom UI events specific to RGH
+// Custom UI events specific to GitHub
 interface GlobalEventHandlersEventMap {
-	'details:toggled': CustomEvent;
-	'filterable:change': CustomEvent;
-	'menu:activated': CustomEvent;
-	'rgh:view-markdown-rendered': CustomEvent;
-	'rgh:view-markdown-source': CustomEvent;
 	'pjax:error': CustomEvent;
 	'page:loaded': CustomEvent;
-	'pjax:start': CustomEvent;
-	'session:resume': CustomEvent;
-	'input': InputEvent; // Remove once no longer necessary (2022?)
+	'turbo:visit': CustomEvent;
+}
+
+interface HTMLElementTagNameMap {
+	'rgh-options': HTMLElement & {domain: string};
 }
 
 declare namespace JSX {
 	interface IntrinsicElements {
-		'clipboard-copy': IntrinsicElements.button & {for?: string};
-		'details-dialog': IntrinsicElements.div & {tabindex: string};
+		'anchored-position': IntrinsicElements.div;
+		'batch-deferred-content': IntrinsicElements.div;
 		'details-menu': IntrinsicElements.div & {src?: string; preload?: boolean};
-		'has-rgh': IntrinsicElements.div;
+		'feature-item': IntrinsicElements.HTMLElement & {id: string; 'data-text': string};
 		'has-rgh-inner': IntrinsicElements.div;
+		'has-rgh': IntrinsicElements.div;
 		'include-fragment': IntrinsicElements.div & {src?: string};
-		'label': IntrinsicElements.label & {for?: string};
 		'relative-time': IntrinsicElements.div & {datetime: string};
+		'segmented-control': IntrinsicElements.HTMLElement;
 		'time-ago': IntrinsicElements.div & {datetime: string; format?: string};
+		'tool-tip': IntrinsicElements.HTMLElement & {for?: string};
+		label: IntrinsicElements.label & {for?: string};
 	}
 
 	type BaseElement = IntrinsicElements['div'];
@@ -55,23 +69,23 @@ declare namespace JSX {
 	}
 }
 
-// Drop after https://github.com/Microsoft/TypeScript/issues/30928
+// Drop after https://togithub.com/Microsoft/TypeScript/issues/30928
+// eslint-disable-next-line @typescript-eslint/consistent-indexed-object-style -- Declaration merging
 interface NamedNodeMap {
 	[key: string]: Attr;
 }
 
-// Drop after https://github.com/Microsoft/TypeScript/issues/30928
+// Drop after https://togithub.com/Microsoft/TypeScript/issues/30928
+// eslint-disable-next-line @typescript-eslint/consistent-indexed-object-style -- Declaration merging
 interface HTMLFormControlsCollection {
-	[key: string]: HTMLInputElement | HTMLTextAreaElement | HTMLButtonElement;
-}
-
-declare module 'react' {
-	const FC = (): JSX.Element => JSX.Element;
-	const React = {FC};
-	export default React;
+	[key: string]: HTMLInputElement | HTMLTextAreaElement | HTMLButtonElement | HTMLSelectElement;
 }
 
 // Make `element.cloneNode()` preserve its type instead of returning Node
 interface Node extends EventTarget {
 	cloneNode(deep?: boolean): this;
+}
+
+interface SignalAsOptions {
+	signal?: AbortSignal;
 }

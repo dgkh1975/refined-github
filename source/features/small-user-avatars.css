@@ -1,0 +1,25 @@
+.rgh-mention-avatar::before {
+	content: '';
+	display: inline-block;
+	width: 1em !important;
+	height: 1em;
+	min-width: 16px;
+	min-height: 16px;
+	margin-right: 0.2em;
+	border-radius: 50%;
+	background-image: var(--avatar-url);
+	background-size: cover;
+	background-position: center;
+	vertical-align: middle;
+}
+
+.user-mention {
+	margin-left: 0 !important;
+	margin-right: 0 !important;
+}
+
+[data-testid='list-row-repo-name-and-number'] relative-time {
+	/* Due to `inline-block` on `.small-user-avatars`, which is used as a "nowrap" container */
+	/* https://github.com/refined-github/refined-github/issues/8396 */
+	vertical-align: baseline;
+}

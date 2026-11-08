@@ -1,46 +1,62 @@
 import './no-unnecessary-split-diff-view.css';
-import select from 'select-dom';
+
 import * as pageDetect from 'github-url-detection';
+import {$, closestElement, elementExists} from 'select-dom';
 
-import features from '.';
-import onDiffFileLoad from '../github-events/on-diff-file-load';
+import features from '../feature-manager.js';
+import observe from '../helpers/selector-observer.js';
 
-function isUnifiedDiff(): boolean {
-	return select.exists([
-		'[value="unified"][checked]', // Form in PR
-		'.table-of-contents .selected[href*="diff=unified"]', // Link in single commit
-	]);
-}
+/* TODO [2026-10-01]: remove */
+void features.addCssFeature(import.meta.url);
 
-function init(): void {
-	for (const diffTable of select.all('.js-diff-table:not(.rgh-no-unnecessary-split-diff-view-visited)')) {
-		diffTable.classList.add('rgh-no-unnecessary-split-diff-view-visited');
-		for (const side of ['left', 'right']) {
-			if (!select.exists(`[data-split-side="${side}"]:is(.blob-code-addition, .blob-code-deletion)`, diffTable)) {
-				// eslint-disable-next-line unicorn/prefer-dom-node-dataset -- CSS file has the same selector, this can be grepped
-				diffTable.setAttribute('data-rgh-hide-empty-split-diff-side', side);
-				break;
-			}
-		}
+function manageSplitDiffState(tableBody: HTMLTableSectionElement): void {
+	const table = closestElement('table', tableBody);
+	const columnsGroup = $('colgroup', table);
+	// Diff view is unified
+	if (columnsGroup.childElementCount !== 4) {
+		table.classList.remove('rgh-no-split-diff');
+		return;
+	}
+
+	// Avoid selecting suggested deletions/additions
+	if (!elementExists(':scope > tr > td:nth-child(2) > .deletion', tableBody)) {
+		table.classList.add('rgh-no-split-diff', 'rgh-only-additions');
+	} else if (!elementExists(':scope > tr > td:nth-child(4) > .addition', tableBody)) {
+		table.classList.add('rgh-no-split-diff', 'rgh-only-deletions');
 	}
 }
 
-void features.add(__filebasename, {
-	asLongAs: [
-		// Make sure the class names we need exist on the page #4483
-		() => select.exists('.js-diff-table :is([data-split-side="left"], [data-split-side="right"]):is(.blob-code-addition, .blob-code-deletion)'),
-	],
+function init(signal: AbortSignal): void {
+	observe('[class*="tableLayoutFixed"] > tbody', manageSplitDiffState, {signal});
+}
+
+void features.add(import.meta.url, {
 	include: [
-		pageDetect.isCommit,
+		pageDetect.isPR,
 		pageDetect.isCompare,
-		pageDetect.isPRFiles,
+		pageDetect.isCommit,
 	],
-	exclude: [
-		isUnifiedDiff,
-	],
-	additionalListeners: [
-		onDiffFileLoad,
-	],
-	deduplicate: 'has-rgh-inner',
 	init,
 });
+
+/*
+
+## Test URLs
+
+### PR files
+
+https://github.com/refined-github/sandbox/pull/50/files?diff=split
+
+### PR files with annotations
+
+https://github.com/fregante/sandbox/pull/30/files
+
+### Compare page
+
+https://github.com/refined-github/sandbox/compare/no-unnecessary-split-diff-view?expand=1&diff=split
+
+### Single commit
+
+https://github.com/refined-github/sandbox/commit/c28cc8e5271452b5b4c347d46a63f717c29417d6?diff=split
+
+*/

@@ -1,0 +1,12 @@
+query GetProjectCount($owner: String!, $name: String!) {
+	repository(owner: $owner, name: $name) {
+		projectsV2 {
+			totalCount
+		}
+	}
+	organization(login: $owner) {
+		projectsV2 {
+			totalCount
+		}
+	}
+}

@@ -1,35 +1,36 @@
-import select from 'select-dom';
-import * as pageDetect from 'github-url-detection';
+import features from '../feature-manager.js';
+import {isEditable} from '../helpers/dom-utils.js';
+import showOverlay from '../helpers/overlay.js';
 
-import features from '.';
-import {isEditable} from '../helpers/dom-utils';
-
-const handler = ({key, target}: KeyboardEvent): void => {
-	if (key === 'y' && !isEditable(target)) {
-		const permalink = select('a.js-permalink-shortcut')!.href;
-		void navigator.clipboard.writeText(permalink + location.hash);
+async function handler({key, target}: KeyboardEvent): Promise<void> {
+	if (key !== 'y' || isEditable(target)) {
+		return;
 	}
-};
 
-function init(): void {
-	window.addEventListener('keyup', handler);
+	const url = location.href;
+	await navigator.clipboard.writeText(url);
+	// Log to ensure we're coping the new URL
+	console.log('Copied URL to the clipboard', url);
+	await showOverlay('Permalink copied to clipboard');
 }
 
-function deinit(): void {
-	window.removeEventListener('keyup', handler);
+function init(signal: AbortSignal): void {
+	globalThis.addEventListener('keyup', handler, {signal});
 }
 
-void features.add(__filebasename, {
-	include: [
-		pageDetect.isBlame,
-		pageDetect.isCompare,
-		pageDetect.isRepoTree,
-		pageDetect.isRepoCommitList,
-		pageDetect.isSingleCommit,
-		pageDetect.isSingleFile,
-	],
-	awaitDomReady: false,
-	deduplicate: false,
+void features.add(import.meta.url, {
+	shortcuts: {
+		y: 'Copy permalink to clipboard',
+	},
 	init,
-	deinit,
 });
+
+/*
+
+Test URLs
+
+> Any page, particularly it should work copy the permalink when `y` is pressed on:
+
+https://github.com/refined-github/refined-github/blob/main/.gitignore
+
+*/

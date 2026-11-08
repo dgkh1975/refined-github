@@ -1,166 +1,203 @@
-import React from 'dom-chef';
-import cache from 'webext-storage-cache';
-import select from 'select-dom';
-import {BugIcon} from '@primer/octicons-react';
 import elementReady from 'element-ready';
 import * as pageDetect from 'github-url-detection';
+import BugIcon from 'octicons-plain-react/Bug';
+import {writable} from 'svelte/store';
+import {assert} from 'ts-extras';
+import {CachedFunction} from 'webext-storage-cache';
 
-import features from '.';
-import * as api from '../github-helpers/api';
-import {getRepo} from '../github-helpers';
-import SearchQuery from '../github-helpers/search-query';
-import abbreviateNumber from '../helpers/abbreviate-number';
+import {addTab} from '../components/extensible-nav-store.js';
+import features from '../feature-manager.js';
+import api from '../github-helpers/api.js';
+import isBugLabel from '../github-helpers/bugs-label.js';
+import {buildRepoUrl, cacheByRepo, getRepo} from '../github-helpers/index.js';
+import SearchQuery from '../github-helpers/search-query.js';
+import onetime from '../helpers/onetime.js';
+import CountExactBugs from './bugs-tab-exact.gql';
+import CountBugs from './bugs-tab.gql';
 
-const supportedLabels = /^(bug|confirmed-bug|type:bug|kind:bug|:\w+:bug)$/i;
-const getBugLabelCacheKey = (): string => 'bugs-label:' + getRepo()!.nameWithOwner;
-const getBugLabel = async (): Promise<string | undefined> => cache.get<string>(getBugLabelCacheKey());
-const isBugLabel = (label: string): boolean => supportedLabels.test(label.replace(/\s/g, ''));
+type Bugs = {
+	label?: string;
+	count: number;
+};
 
-async function highlightBugsTabOnIssuePage(): Promise<void | false> {
-	if (await countBugs() === 0 || !await elementReady('#partial-discussion-sidebar .IssueLabel[href$="/bug" i]')) {
-		return false;
-	}
-
-	const bugsTab = await elementReady('.rgh-bug-tab', {stopOnDomReady: false, timeout: 10_000});
-	bugsTab!.classList.add('selected');
-
-	const issuesTab = select('.UnderlineNav-item[data-hotkey="g i"]')!;
-	issuesTab.classList.remove('selected');
-	issuesTab.removeAttribute('aria-current');
+function getFullSearchQuery(bugsLabel: string | undefined): string {
+	return bugsLabel ? `(label:${SearchQuery.escapeValue(bugsLabel)} OR type:Bug)` : 'type:Bug';
 }
 
-async function countBugsWithUnknownLabel(): Promise<number> {
-	const {repository} = await api.v4(`
-		repository() {
-			labels(query: "bug", first: 10) {
-				nodes {
-					name
-					issues(states: OPEN) {
-						totalCount
-					}
-				}
-			}
-		}
-	`);
+async function countBugs(): Promise<Bugs> {
+	type ApiResponse = {
+		typeBug: {
+			totalCount: number;
+		};
+		issues: {
+			totalCount: number;
+		};
+		labels: {
+			nodes: Array<{
+				name: string;
+				issues: {
+					totalCount: number;
+				};
+			}>;
+		};
+	};
+	const {repository} = await api.v4(CountBugs) as {repository: ApiResponse};
+	const bugTypeCount = repository.typeBug.totalCount;
 
-	const label: AnyObject | undefined = repository.labels.nodes
-		.find((label: AnyObject) => isBugLabel(label.name));
-	if (!label) {
-		return 0;
-	}
+	let label = repository.labels.nodes.find(({name}) => name === 'bug');
+	label ??= repository.labels.nodes.find(({name}) => isBugLabel(name));
 
-	void cache.set(getBugLabelCacheKey(), label.name ?? false);
-	return label.issues.totalCount ?? 0;
+	// Label might not be found if the repo uses a non-standard bug label name
+	const bugLabelCount = label?.issues.totalCount ?? 0;
+	const bugCount = Math.max(bugTypeCount, bugLabelCount);
+
+	return {
+		// Missing when the repo has no bug label, such as one that only uses the Bug issue type
+		label: label?.name,
+
+		// GitHub bug: labelled issues are counted even if issues are disabled
+		count: Math.min(bugCount, repository.issues.totalCount),
+	};
 }
 
-async function countIssuesWithLabel(label: string): Promise<number> {
-	const {repository} = await api.v4(`
-		repository() {
-			label(name: "${label}") {
-				issues(states: OPEN) {
-					totalCount
-				}
-			}
-		}
-	`);
+async function countExactBugs(query: string): Promise<number> {
+	const {search} = await api.v4(CountExactBugs, {
+		variables: {query: `repo:${getRepo()!.nameWithOwner} ${query}`},
+	});
 
-	return repository.label?.issues.totalCount ?? 0;
+	return search.issueCount;
 }
 
-const countBugs = cache.function(async (): Promise<number> => {
-	const bugLabel = await getBugLabel();
-	return bugLabel
-		? countIssuesWithLabel(bugLabel)
-		: countBugsWithUnknownLabel();
-}, {
+const exactBugs = new CachedFunction('exact-bugs', {
+	updater: countExactBugs,
 	maxAge: {minutes: 30},
 	staleWhileRevalidate: {days: 4},
-	cacheKey: (): string => __filebasename + ':' + getRepo()!.nameWithOwner,
+	cacheKey: cacheByRepo,
 });
 
-async function init(): Promise<void | false> {
+const bugs = new CachedFunction('bugs', {
+	updater: countBugs,
+	maxAge: {minutes: 30},
+	staleWhileRevalidate: {days: 4},
+	cacheKey: cacheByRepo,
+});
+
+async function getBugsLabel(): Promise<string | undefined> {
+	const cached = await bugs.getCached();
+	return cached ? cached.label : 'bug';
+}
+
+async function isBugsListing(): Promise<boolean> {
+	const query = SearchQuery.from(location);
+	const bugsLabel = await getBugsLabel();
+	return (bugsLabel !== undefined && query.includes(`label:${SearchQuery.escapeValue(bugsLabel)}`))
+		|| query.includes(getFullSearchQuery(bugsLabel));
+}
+
+async function addBugsTabOnce(): Promise<void | false> {
 	// Query API as early as possible, even if it's not necessary on archived repos
-	const countPromise = countBugs();
+	const bugsPromise = bugs.get();
 
 	// On a label:bug listing:
 	// - always show the tab, as soon as possible
 	// - update the count later
 	// On other pages:
 	// - only show the tab if needed
-	const isBugsPage = new SearchQuery(location.search).includes(`label:${SearchQuery.escapeValue(await getBugLabel() ?? 'bug')}`);
-	if (!isBugsPage && await countPromise === 0) {
-		return false;
+	if (!(await isBugsListing())) {
+		const {count} = await bugsPromise;
+		if (count === 0) {
+			return false;
+		}
 	}
 
-	const issuesTab = await elementReady('a.UnderlineNav-item[data-hotkey="g i"]', {waitForChildren: false});
-	if (!issuesTab) {
-		// Repo is archived
-		return false;
-	}
+	const {href, query} = new SearchQuery(buildRepoUrl('issues'))
+		.append(getFullSearchQuery(await getBugsLabel()));
 
-	if (isBugsPage) {
-		// Hide pinned issues on the tab page, they might not belong there
-		// eslint-disable-next-line promise/prefer-await-to-then -- Don't await; if there are no pinned issues, this would delay the bug count update
-		void elementReady('.js-pinned-issues-reorder-container', {waitForChildren: false}).then(pinnedIssues => pinnedIssues?.remove());
-	}
-
-	// Copy Issues tab
-	const bugsTab = issuesTab.cloneNode(true);
-	bugsTab.classList.add('rgh-bug-tab');
-
-	// Disable unwanted behavior #3001
-	bugsTab.removeAttribute('data-hotkey');
-	bugsTab.removeAttribute('data-selected-links');
-	issuesTab.removeAttribute('data-selected-links');
-
-	// Update its appearance
-	const bugsTabTitle = select('[data-content]', bugsTab)!;
-	bugsTabTitle.dataset.content = 'Bugs';
-	bugsTabTitle.textContent = 'Bugs';
-	select('.octicon', bugsTab)!.replaceWith(<BugIcon className="UnderlineNav-octicon d-none d-sm-inline"/>);
-
-	// Un-select one of the tabs if necessary
-	const selectedTab = !isBugsPage || pageDetect.isPRList() ? bugsTab : issuesTab;
-	selectedTab.classList.remove('selected');
-	selectedTab.removeAttribute('aria-current');
-
-	// Set temporary counter
-	const bugsCounter = select('.Counter', bugsTab)!;
-	bugsCounter.textContent = '0';
-	bugsCounter.title = '';
-
-	// Update Bugs’ link
-	new SearchQuery(bugsTab).add(`label:${SearchQuery.escapeValue((await getBugLabel())!)}`);
-
-	// In case GitHub changes its layout again #4166
-	if (issuesTab.parentElement!.tagName === 'LI') {
-		issuesTab.parentElement!.after(<li className="d-flex">{bugsTab}</li>);
-	} else {
-		issuesTab.after(bugsTab);
-	}
+	const counter = writable<number | undefined>();
+	addTab({
+		id: 'rgh-bugs',
+		href,
+		label: 'Bugs',
+		icon: BugIcon,
+		counter,
+		// eslint-disable-next-line @typescript-eslint/no-use-before-define -- TODO later, smaller diff now
+		selected: isBugsTabSelected,
+	}, 'pull-requests');
 
 	// Update bugs count
+	let count: number;
 	try {
-		const bugCount = await countPromise;
-		bugsCounter.textContent = abbreviateNumber(bugCount);
-		bugsCounter.title = bugCount > 999 ? String(bugCount) : '';
-	} catch (error: unknown) {
-		bugsCounter.remove();
-		features.log.error(__filebasename, error);
+		({count} = await bugsPromise);
+		counter.set(count);
+	} catch (error) {
+		counter.set(undefined);
+		throw error; // Likely an API call error that will be handled by the init
 	}
+
+	// Count again once we know the label, without delaying the initial tag appearance
+	const exactCount = await exactBugs.get(query);
+	// GitHub bug: https://github.com/refined-github/refined-github/pull/10117
+	assert(exactCount > 0, `Compound bug search returned zero results when about ${count} were expected`);
+	counter.set(exactCount);
 }
 
-void features.add(__filebasename, {
-	include: [
-		pageDetect.isRepo,
+async function removePinnedIssues(): Promise<void> {
+	// TODO: Move to CSS, but it needs to be removed when the user navigates away from the bugs tab
+	const pinnedIssues = await elementReady('ul[class*="PinnedIssues-module__area"]', {
+		waitForChildren: false,
+		stopOnDomReady: false,
+		signal: AbortSignal.timeout(1000),
+	});
+
+	// The repo might not have any pinned issues
+	pinnedIssues?.remove();
+}
+
+async function isBugsTabSelected(): Promise<boolean> {
+	// Early return when it's certain that it's not selected.
+	// This avoids delaying the `selected` check for other tabs.
+	if (!pageDetect.isRepoIssueList() && !pageDetect.isIssue()) {
+		return false;
+	}
+
+	const {count, label} = await bugs.get();
+	if (count === 0) {
+		return false;
+	}
+
+	if (
+		(label !== undefined && pageDetect.isRepoTaxonomyIssueOrPRList()
+			&& location.pathname.endsWith('/labels/' + encodeURIComponent(label)))
+		|| (pageDetect.isRepoIssueList() && (await isBugsListing()))
+	) {
+		// TODO: eh. This side effect should be moved
+		void removePinnedIssues();
+		return true;
+	}
+
+	return label !== undefined
+		&& pageDetect.isIssue()
+		&& Boolean(await elementReady(`#partial-discussion-sidebar .IssueLabel[data-name="${label}"]`));
+}
+
+void features.add(import.meta.url, {
+	asLongAs: [
+		pageDetect.hasRepoHeader,
+		// Some repos may disable issues altogether
+		() => Boolean(elementReady('li[data-tab-item="issues"]', {waitForChildren: false})),
 	],
-	awaitDomReady: false,
-	init,
-}, {
-	include: [
-		pageDetect.isIssue,
-	],
-	awaitDomReady: false,
-	deduplicate: false,
-	init: highlightBugsTabOnIssuePage,
+	requiresToken: true,
+	init: onetime(addBugsTabOnce),
 });
+
+/*
+
+Test URLs:
+
+- label:bug https://github.com/refined-github/refined-github/issues
+- label:"Type: Bug" https://github.com/react/react/issues
+- type:Bug: https://github.com/keepassxreboot/keepassxc/issues
+- Issues disabled: https://github.com/bfred-it-org/no-issues/labels
+- only type:Bug, no label https://github.com/udecode/plate/issues
+
+*/

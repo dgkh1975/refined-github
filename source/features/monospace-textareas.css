@@ -1,14 +1,31 @@
-/* Limit width of commit title to 72 characters */
-.rgh-monospace-textareas :is(#merge_title_field, #commit-summary-input) {
-	/* 12px for the padding and 1px for the border https://user-images.githubusercontent.com/46634000/136789268-442caa39-33bc-4af3-8fb2-9cf6db722127.png */
-	width: calc(72ch + 26px);
-	max-width: 100%;
-}
+/* Use monospace font in various fields */
+/* Use same font-family as GitHub style for `code` */
 
-.rgh-monospace-textareas :is(#merge_title_field, #commit-summary-input, textarea) {
-	font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace !important;
-}
-
-.rgh-monospace-textareas textarea {
-	font-size: 13px;
+/* PR title input: https://github.com/refined-github/sandbox/pull/16 */
+/* `form` excludes PR lists #10064 */
+[class^='prc-PageLayout-Header'] form input,
+/* Merge commit title input: https://github.com/refined-github/sandbox/pull/16 */
+[data-testid='mergebox-partial'] input[type='text'],
+/* Test URL: https://github.com/refined-github/sandbox/compare/default-a...new?expand=1 */
+input[name='pull_request[title]'],
+/* Test URL: https://github.com/refined-github/sandbox/pull/10#issue-comment-box */
+[placeholder='Add an optional extended description…'],
+/* Test URL: https://github.com/refined-github/refined-github/edit/main/.editorconfig */
+#commit-message-input,
+/* Test URL: https://github.com/refined-github/refined-github/edit/main/.editorconfig */
+#commit-description-input,
+/* Test URL: https://github.com/refined-github/refined-github/releases/new */
+#release_body,
+/* Test URL: https://github.com/settings/gpg/new */
+#gpg_key_public_key,
+/* Test URL: https://github.com/settings/ssh/new */
+#ssh_key_key {
+	font-family:
+		ui-monospace,
+		SFMono-Regular,
+		'SF Mono',
+		Menlo,
+		Consolas,
+		'Liberation Mono',
+		monospace !important;
 }

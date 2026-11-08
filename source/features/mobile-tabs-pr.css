@@ -1,0 +1,51 @@
+/* Info: https://github.com/refined-github/refined-github/issues/7725 */
+@media (width <= 767px) {
+	[aria-label='Pull request navigation'] a[class*='TabNavLink'] {
+		display: inline-flex;
+		flex-wrap: wrap;
+		white-space: nowrap;
+		place-content: center;
+		align-items: center;
+		padding: 0.7em 1em;
+		font-size: 13px;
+		gap: 0 5px;
+
+		/* Fit the text, but keep the icon + number on one line */
+		width: min-content;
+		min-width: 80px;
+
+		svg {
+			order: -2;
+			display: block !important;
+			margin: 0 !important;
+		}
+
+		[data-variant='secondary'] {
+			order: -1;
+			margin: 0 !important;
+			/* Optical alignment */
+			margin-right: -0.5em !important;
+		}
+	}
+}
+
+@media (width <= 500px) {
+	[aria-label='Pull request navigation'] a[class*='TabNavLink'] {
+		font-size: 10px;
+
+		[data-variant='secondary'] {
+			background: none;
+			padding: 0;
+			margin: 0;
+			min-width: 0;
+		}
+	}
+}
+
+/*
+
+Test URLs:
+
+- https://github.com/refined-github/sandbox/pull/1
+
+*/

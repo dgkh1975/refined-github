@@ -1,10 +1,22 @@
-/* Aligns it right */
-.rgh-release-download-count {
-	margin-left: auto;
-}
-
 /* Simulates fixed columns */
-.rgh-release-download-count + small {
-	min-width: 4.5em;
-	text-align: right;
+.rgh-release-download-count {
+	/* `.flex-wrap` makes the element overflow. This prevents it */
+	max-width: 100%;
+
+	> span:not(:last-child, [data-view-component]) {
+		flex-basis: 0 !important;
+		min-width: 5em;
+	}
+
+	/* Date */
+	> span:last-child {
+		width: 7em;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	/* Right-align on mobile */
+	[data-rgh-heat] {
+		min-width: 5em;
+	}
 }

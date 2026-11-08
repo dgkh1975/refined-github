@@ -1,0 +1,48 @@
+{
+	"$schema": "https://dprint.dev/schemas/v0.json",
+	"plugins": [
+		"./node_modules/dprint-plugin-markup/plugin.wasm",
+		"./node_modules/@dprint/typescript/plugin.wasm",
+		"./node_modules/dprint-plugin-malva/plugin.wasm",
+		"./node_modules/dprint-plugin-graphql/plugin.wasm",
+		"./node_modules/@dprint/json/plugin.wasm",
+		"./node_modules/dprint-plugin-yaml/plugin.wasm"
+	],
+	"excludes": [
+		"media/sponsor-*",
+		"safari",
+		"eslint-suppressions.json"
+	],
+	"useTabs": true,
+	"markup": {
+		"quotes": "double",
+		"whitespaceSensitivity": "strict",
+		"scriptIndent": true,
+		"styleIndent": true
+	},
+	"typescript": {
+		"indentWidth": 1,
+		"quoteStyle": "preferSingle",
+		"jsx.quoteStyle": "preferDouble",
+		"trailingCommas": "onlyMultiLine",
+		"semicolons": "prefer",
+		"lineWidth": 120,
+		"jsx.multiLineParens": "prefer",
+		// FUTURE: No support for {}-less selectors yet
+		"taggedTemplate.formatEmbedded": false,
+		"spaceSurroundingProperties": false,
+		"importDeclaration.spaceSurroundingNamedImports": false,
+		"exportDeclaration.spaceSurroundingNamedExports": false
+	},
+	"malva": {
+		"linebreakInPseudoParens": true,
+		"quotes": "alwaysSingle"
+	},
+	"json": {
+		"packageJson.applyConventions": false
+	},
+	"graphql": {},
+	"yaml": {
+		"quotes": "preferSingle"
+	}
+}

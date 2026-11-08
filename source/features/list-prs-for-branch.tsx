@@ -1,0 +1,73 @@
+import React from 'dom-chef';
+import {closestElementOptional} from 'select-dom';
+
+import features from '../feature-manager.js';
+import getCurrentGitRef from '../github-helpers/get-current-git-ref.js';
+import {isPermalink, isRepoCommitListRoot} from '../github-helpers/index.js';
+import isDefaultBranch from '../github-helpers/is-default-branch.js';
+import {branchSelector} from '../github-helpers/selectors.js';
+import observe from '../helpers/selector-observer.js';
+import {buttonGroup} from './default-branch-button.js';
+import {pullRequestsAssociatedWithBranch, stateIcon} from './show-associated-branch-prs-on-fork.js';
+
+// Taken from https://github.com/fregante/github-issue-link-status/blob/98792f2837352bacbf80664f3edbcec8e579ed17/source/github-issue-link-status.js#L10
+const stateColorMap = {
+	/* eslint-disable @typescript-eslint/naming-convention -- The same case as in the API response */
+	OPEN: 'color-fg-success',
+	CLOSED: 'color-fg-danger',
+	MERGED: 'color-fg-done',
+	DRAFT: '',
+	/* eslint-enable @typescript-eslint/naming-convention */
+};
+
+async function add(branchSelectorButton: HTMLElement): Promise<void | false> {
+	const prsByBranch = await pullRequestsAssociatedWithBranch.get();
+	const currentBranch = getCurrentGitRef()!;
+	const prInfo = prsByBranch[currentBranch];
+	if (!prInfo) {
+		return;
+	}
+
+	const StateIcon = stateIcon[prInfo.state];
+
+	// `default-branch-button` may have already grouped the selector; stay outside of the group
+	(closestElementOptional(buttonGroup.selector, branchSelectorButton) ?? branchSelectorButton).after(
+		<a
+			data-issue-and-pr-hovercards-enabled
+			href={prInfo.url}
+			className="btn flex-self-center rgh-list-prs-for-branch"
+			// Keep the filters on the right
+			style={{marginRight: 'auto'}}
+			data-hovercard-type="pull_request"
+			data-hovercard-url={prInfo.url + '/hovercard'}
+		>
+			<StateIcon className={stateColorMap[prInfo.state]} />
+			<span> #{prInfo.number}</span>
+		</a>,
+	);
+}
+
+async function init(signal: AbortSignal): Promise<false | void> {
+	observe(branchSelector, add, {signal});
+}
+
+void features.add(import.meta.url, {
+	include: [
+		isRepoCommitListRoot,
+	],
+	exclude: [
+		isDefaultBranch,
+		isPermalink,
+	],
+	requiresToken: true,
+	init,
+});
+
+/*
+
+Test URLs
+
+https://github.com/refined-github/sandbox/commits/4679-1
+https://github.com/refined-github/sandbox/commits/branch/with/slashes
+
+*/

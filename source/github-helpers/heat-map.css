@@ -1,0 +1,83 @@
+:root {
+	--rgh-heat-color: #c24e00;
+
+	[data-rgh-heat='1'] {
+		color: color-mix(
+			in srgb,
+			var(--rgh-heat-color) 100%,
+			var(--fgColor-muted, var(--color-fg-muted, fuchsia))
+		) !important;
+	}
+
+	[data-rgh-heat='2'] {
+		color: color-mix(
+			in srgb,
+			var(--rgh-heat-color) 90%,
+			var(--fgColor-muted, var(--color-fg-muted, fuchsia))
+		) !important;
+	}
+
+	[data-rgh-heat='3'] {
+		color: color-mix(
+			in srgb,
+			var(--rgh-heat-color) 80%,
+			var(--fgColor-muted, var(--color-fg-muted, fuchsia))
+		) !important;
+	}
+
+	[data-rgh-heat='4'] {
+		color: color-mix(
+			in srgb,
+			var(--rgh-heat-color) 70%,
+			var(--fgColor-muted, var(--color-fg-muted, fuchsia))
+		) !important;
+	}
+
+	[data-rgh-heat='5'] {
+		color: color-mix(
+			in srgb,
+			var(--rgh-heat-color) 60%,
+			var(--fgColor-muted, var(--color-fg-muted, fuchsia))
+		) !important;
+	}
+
+	[data-rgh-heat='6'] {
+		color: color-mix(
+			in srgb,
+			var(--rgh-heat-color) 50%,
+			var(--fgColor-muted, var(--color-fg-muted, fuchsia))
+		) !important;
+	}
+
+	[data-rgh-heat='7'] {
+		color: color-mix(
+			in srgb,
+			var(--rgh-heat-color) 40%,
+			var(--fgColor-muted, var(--color-fg-muted, fuchsia))
+		) !important;
+	}
+
+	[data-rgh-heat='8'] {
+		color: color-mix(
+			in srgb,
+			var(--rgh-heat-color) 30%,
+			var(--fgColor-muted, var(--color-fg-muted, fuchsia))
+		) !important;
+	}
+
+	[data-rgh-heat='9'] {
+		color: color-mix(
+			in srgb,
+			var(--rgh-heat-color) 20%,
+			var(--fgColor-muted, var(--color-fg-muted, fuchsia))
+		) !important;
+	}
+
+	[data-rgh-heat='10'] {
+		color: color-mix(
+			in srgb,
+			var(--rgh-heat-color) 0%,
+			var(--fgColor-muted, var(--color-fg-muted, fuchsia))
+		) !important;
+	}
+}

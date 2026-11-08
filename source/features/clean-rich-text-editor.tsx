@@ -1,30 +1,20 @@
 import './clean-rich-text-editor.css';
-import select from 'select-dom';
-import onetime from 'onetime';
-import * as pageDetect from 'github-url-detection';
 
-import features from '.';
+import features from '../feature-manager.js';
 
-function hideButtons(): void {
-	document.body.classList.add('rgh-clean-rich-text-editor');
-}
+void features.addCssFeature(import.meta.url);
 
-function hideTextareaTooltip(): void {
-	for (const textarea of select.all('.comment-form-textarea')) {
-		textarea.title = '';
-	}
-}
+/*
 
-void features.add(__filebasename, {
-	include: [
-		pageDetect.hasRichTextEditor,
-	],
-	deduplicate: 'has-rgh-inner',
-	init: hideTextareaTooltip,
-}, {
-	include: [
-		pageDetect.isRepo,
-	],
-	awaitDomReady: false,
-	init: onetime(hideButtons),
-});
+## Test URLs
+
+On create issue page
+One PR https://github.com/refined-github/refined-github/issues/new?template=1_bug_report.yml
+
+On an issue page
+https://github.com/refined-github/refined-github/issues/6408
+
+On discussion page
+https://github.com/StrataSource/Portal-2-Community-Edition/discussions/706
+
+*/

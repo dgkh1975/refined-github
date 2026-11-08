@@ -1,22 +1,32 @@
-import elementReady from 'element-ready';
 import * as pageDetect from 'github-url-detection';
+import {$} from 'select-dom';
 
-import features from '.';
-import onElementRemoval from '../helpers/on-element-removal';
+import features from '../feature-manager.js';
+import {registerHotkey} from '../github-helpers/hotkey.js';
 
-async function init(): Promise<void> {
-	const selectAllNotifications = await elementReady('.js-notifications-mark-all-prompt');
-	if (selectAllNotifications) { // Notifications page may be empty
-		selectAllNotifications.dataset.hotkey = 'a';
-		await onElementRemoval(selectAllNotifications); // "Select all" checkbox will be replaced if there's more notifications to load #4199
-		void init();
-	}
+function selectAllNotifications(): void {
+	$('.js-notifications-mark-all-prompt').click();
 }
 
-void features.add(__filebasename, {
+function init(signal: AbortSignal): void {
+	registerHotkey('a', selectAllNotifications, {signal});
+}
+
+void features.add(import.meta.url, {
+	shortcuts: {
+		a: 'Select all notifications',
+	},
 	include: [
 		pageDetect.isNotifications,
 	],
-	awaitDomReady: false,
 	init,
 });
+
+/*
+
+Test URLs:
+
+https://github.com/notifications (Grouped by date)
+https://github.com/notifications (Grouped by repo)
+
+*/

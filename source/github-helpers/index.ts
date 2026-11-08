@@ -1,76 +1,70 @@
-import select from 'select-dom';
-import onetime from 'onetime';
 import elementReady from 'element-ready';
-import compareVersions from 'tiny-version-compare';
 import * as pageDetect from 'github-url-detection';
+import memoize from 'memoize';
+import {$, $optional, closestElementOptional, elementExists} from 'select-dom';
+import compareVersions from 'tiny-version-compare';
+import {assert} from 'ts-extras';
+import type {RequireAtLeastOne} from 'type-fest';
 
-// This never changes, so it can be cached here
-export const getUsername = onetime(pageDetect.utils.getUsername);
-export const {getRepositoryInfo: getRepo, getCleanPathname} = pageDetect.utils;
+import {is} from '../helpers/css-selectors.js';
+import getCommentAuthor from './get-comment-author.js';
+import {branchSelector} from './selectors.js';
 
-export const getConversationNumber = (): string | undefined => {
-	if (pageDetect.isPR() || pageDetect.isIssue()) {
-		return location.pathname.split('/')[4];
-	}
+// Re-export for convenience
+export const {getRepositoryInfo: getRepo, getCleanPathname, getLoggedInUser} = pageDetect.utils;
 
-	return undefined;
-};
+export function getConversationNumber({pathname}: URL | Location = location): number | undefined {
+	const [, _owner, _repo, type, prNumber] = pathname.split('/', 5);
+	return (type === 'pull' || type === 'issues') && Number(prNumber) ? Number(prNumber) : undefined;
+}
 
-const typesWithCommittish = new Set(['tree', 'blob', 'blame', 'edit', 'commit', 'commits', 'compare']);
-const titleWithCommittish = / at (?<branch>[.\w-/]+)( · [\w-]+\/[\w-]+)?$/i;
-export const getCurrentCommittish = (pathname = location.pathname, title = document.title): string | undefined => {
-	if (!pathname.startsWith('/')) {
-		throw new TypeError(`Expected pathname starting with /, got "${pathname}"`);
-	}
-
-	const [type, unslashedCommittish] = pathname.split('/').slice(3);
-	if (!type || !typesWithCommittish.has(type)) {
-		// Root; or piece of information not applicable to the page
-		return;
-	}
-
-	const parsedTitle = titleWithCommittish.exec(title);
-	if (parsedTitle) {
-		return parsedTitle.groups!.branch;
-	}
-
-	return unslashedCommittish;
-};
-
-export const isFirefox = navigator.userAgent.includes('Firefox/');
 export const isMac = navigator.userAgent.includes('Macintosh');
 
-// The type requires at least one parameter https://stackoverflow.com/a/49910890
-export const buildRepoURL = (...pathParts: Array<string | number> & {0: string}): string => {
+export function buildRepoUrl<S extends string>(
+	...pathParts: RequireAtLeastOne<Array<UnslashedString<S> | number>, 0>
+): string {
 	for (const part of pathParts) {
-		// TODO: Can TypeScript take care of this? With https://devblogs.microsoft.com/typescript/announcing-typescript-4-1-beta/#template-literal-types
 		if (typeof part === 'string' && /^\/|\/$/.test(part)) {
 			throw new TypeError('The path parts shouldn’t start or end with a slash: ' + part);
 		}
 	}
 
 	return [location.origin, getRepo()?.nameWithOwner, ...pathParts].join('/');
-};
-
-export function getForkedRepo(): string | undefined {
-	return select('meta[name="octolytics-dimension-repository_parent_nwo"]')?.content;
 }
 
-export const parseTag = (tag: string): {version: string; namespace: string} => {
-	const [, namespace = '', version = ''] = /(?:(.*)@)?([^@]+)/.exec(tag) ?? [];
+export function getForkedRepo(): `${string}/${string}` | undefined {
+	return $optional('meta[name="octolytics-dimension-repository_parent_nwo"]')?.content as
+		| `${string}/${string}`
+		| undefined;
+}
+
+export function parseTag(tag: string): {version: string; namespace: string} {
+	const {namespace = '', version = ''} = /(?:(?<namespace>.*)@)?(?<version>[^@]+)/.exec(tag)?.groups ?? {};
 	return {namespace, version};
-};
-
-export function compareNames(username: string, realname: string): boolean {
-	return username.replace(/-/g, '').toLowerCase() === realname.normalize('NFD').replace(/[\u0300-\u036F\W.]/g, '').toLowerCase();
 }
 
-const validVersion = /^[vr]?\d+(?:\.\d+)+/;
-const isPrerelease = /^[vr]?\d+(?:\.\d+)+(-\d)/;
+export function isUsernameAlreadyFullName(username: string, realname: string): boolean {
+	// Normalize both strings
+	username = username
+		.replaceAll('-', '')
+		.toLowerCase();
+	realname = realname
+		.normalize('NFD')
+		// Remove diacritics, punctuation and spaces
+		// https://stackoverflow.com/a/37511463/288906
+		// https://www.freecodecamp.org/news/what-is-punct-in-regex-how-to-match-all-punctuation-marks-in-regular-expressions/
+		.replaceAll(/[\s\p{Diacritic}\p{Punctuation}]/gu, '')
+		.toLowerCase();
+
+	return username === realname;
+}
+
+const validVersion = /^[rv]?\d+(?:\.\d+)+/;
+const isPrerelease = /^[rv]?\d+(?:\.\d+)+-\d/;
 export function getLatestVersionTag(tags: string[]): string {
 	// Some tags aren't valid versions; comparison is meaningless.
 	// Just use the latest tag returned by the API (reverse chronologically-sorted list)
-	if (!tags.every(tag => validVersion.test(tag))) {
+	if (tags.some(tag => !validVersion.test(tag))) {
 		return tags[0];
 	}
 
@@ -95,37 +89,162 @@ export function upperCaseFirst(input: string): string {
 	return input.charAt(0).toUpperCase() + input.slice(1).toLowerCase();
 }
 
+const cachePerPage = {
+	cacheKey: () => location.pathname,
+};
+
 /** Is tag or commit, with elementReady */
-export async function isPermalink(): Promise<boolean> {
-	if (/^[\da-f]{40}$/.test(getCurrentCommittish()!)) {
+export const isPermalink = memoize(async () => {
+	// No need for getCurrentGitRef(), it's a simple and exact check
+	if (/^[\da-f]{40}$/.test(location.pathname.split('/', 5)[4])) {
 		// It's a commit
 		return true;
 	}
 
-	await elementReady('[data-hotkey="w"]');
-	return (
-		// Pre "Latest commit design updates"
-		/Tag|Tree/.test(select('[data-hotkey="w"] i')?.textContent ?? '') // Text appears in the branch selector
+	// Awaiting only the branch selector means it resolves early even if the icon tag doesn't exist, whereas awaiting the icon tag would wait for the DOM ready event before resolving.
+	return elementExists(
+		'.octicon-tag', // Tags have an icon
+		await elementReady(branchSelector),
+	);
+}, cachePerPage);
 
-		// "Latest commit design updates"
-		|| select.exists('[data-hotkey="w"] .octicon-tag') // Tags have an icon
+export function isRefinedGitHubRepo(): boolean {
+	return location.pathname.startsWith('/refined-github/refined-github');
+}
+
+export function isAnyRefinedGitHubRepo(): boolean {
+	return /^\/refined-github\/.+/.test(location.pathname);
+}
+
+export function isRefinedGitHubYoloRepo(): boolean {
+	return location.pathname.startsWith('/refined-github/yolo');
+}
+
+export async function isArchivedRepoAsync(): Promise<boolean> {
+	// Load the bare minimum for `isArchivedRepo` to work
+	await elementReady('main > div');
+
+	// DOM-based detection, we want awaitDomReady: false, so it needs to be here
+	return pageDetect.isArchivedRepo();
+}
+
+export const userCanLikelyMergePr = (): boolean => elementExists('.discussion-sidebar-item .octicon-lock');
+
+const navigationBarSelector = is(
+	'.GlobalNav',
+	// Remove after June 2026
+	'.js-repo-nav',
+);
+
+export function areIssuesEnabled(): boolean {
+	const repo = getRepo()!;
+	return elementExists(`${navigationBarSelector} a[href^="/${repo.nameWithOwner}/issues"]`);
+}
+
+export function areDiscussionsEnabled(): boolean {
+	const repo = getRepo()!;
+	return elementExists(`${navigationBarSelector} a[href^="/${repo.nameWithOwner}/discussions"]`);
+}
+
+export const cacheByRepo = (): string => getRepo()!.nameWithOwner;
+
+// Commit lists for files and folders lack a branch selector
+export const isRepoCommitListRoot = (): boolean =>
+	pageDetect.isRepoCommitList() && document.title.startsWith('Commits');
+
+export const isUrlReachable = memoize(async (url: string): Promise<boolean> => {
+	const {ok: isOk} = await fetch(url, {method: 'head'});
+	return isOk;
+});
+
+// Don't make the argument optional, sometimes we really expect it to exist and want to throw an error
+export function extractCurrentBranchFromBranchPicker(branchPicker: HTMLElement): string {
+	// The branch name is always in the DOM in full, even when it's visually clipped
+	return branchPicker.textContent.trim();
+}
+
+/** Trigger a conversation update if the view is out of date */
+// https://github.com/refined-github/refined-github/issues/2465#issuecomment-567173300
+export function triggerConversationUpdate(): void {
+	const marker = $('.js-timeline-marker');
+	marker.dispatchEvent(
+		new CustomEvent('socket:message', {
+			bubbles: true,
+			detail: {data: {gid: marker.dataset.gid}},
+		}),
 	);
 }
 
-// Negative function so it can be used directly in `exclude` array
-export function isNotRefinedGitHubRepo(): boolean {
-	return !location.pathname.startsWith('/refined-github/refined-github/');
+// Fix z-index issue https://github.com/refined-github/refined-github/pull/7430
+export function fixFileHeaderOverlap(child: Element): void {
+	// In the sidebar the container is not present and this fix is not needed
+	closestElementOptional('.container', child)?.classList.add('rgh-z-index-5');
 }
 
-export function shouldFeatureRun({
-	/** Every condition must be true */
-	asLongAs = [() => true],
+export function multilineAriaLabel(...lines: string[]): string {
+	return lines.join('\n');
+}
 
-	/** At least one condition must be true */
-	include = [() => true],
+export function scrollIntoViewIfNeeded(element: Element): void {
+	// @ts-expect-error No Firefox support https://developer.mozilla.org/docs/Web/API/Element/scrollIntoViewIfNeeded
+	(element.scrollIntoViewIfNeeded ?? element.scrollIntoView).call(element);
+}
 
-	/** No conditions must be true */
-	exclude = [() => false],
-}): boolean {
-	return asLongAs.every(c => c()) && include.some(c => c()) && exclude.every(c => !c());
+export function getConversationBody(): Element {
+	return $([
+		'.react-issue-body', // Issues
+		'.js-command-palette-pull-body', // PRs
+	]);
+}
+
+// Issues don't include the author in the title. PRs don't have a "conversation body" on the Files tab.
+const prTitleExtractionRegex = /\bby (?<author>[^·]+?) · Pull Request #\d+ · [^/\\]+\/[^/\\]+$/;
+export function getConversationAuthor(): string {
+	if (pageDetect.isPR()) {
+		const match = prTitleExtractionRegex.exec(document.title);
+		assert(match, `Failed to extract PR author from title: ${document.title}`);
+		return match.groups!.author;
+	}
+
+	return getCommentAuthor(getConversationBody());
+}
+
+export function isOwnConversation(): boolean {
+	return getConversationAuthor() === getLoggedInUser();
+}
+
+export function assertCommitHash(hash: string): void {
+	if (!/^[0-9a-f]{40}$/.test(hash)) {
+		throw new Error(`Invalid commit hash: ${hash}`);
+	}
+}
+
+export function assertUsername(username: string | undefined): asserts username is string {
+	if (!username || /[^\w-]/.test(username)) {
+		throw new TypeError(`Expected a username, got ${username}`);
+	}
+}
+
+/** Use instead of location.assign() */
+export function visitAjaxedPage(url: string): void {
+	const anchor = document.createElement('a');
+	anchor.setAttribute('data-turbo-frame', 'repo-content-turbo-frame');
+	anchor.href = url;
+	document.body.append(anchor);
+	anchor.click();
+	anchor.remove();
+}
+
+/** Can be used to close modals or popovers */
+export function pressEscapeKey(): void {
+	document.body.dispatchEvent(
+		new KeyboardEvent('keydown', {
+			key: 'Escape',
+			code: 'Escape',
+			keyCode: 27,
+			which: 27,
+			bubbles: true,
+			cancelable: true,
+		}),
+	);
 }

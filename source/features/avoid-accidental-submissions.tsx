@@ -1,16 +1,13 @@
+import cx from 'clsx';
+import delegate, {type DelegateEvent} from 'delegate-it';
 import React from 'dom-chef';
-import select from 'select-dom';
-import delegate from 'delegate-it';
 import * as pageDetect from 'github-url-detection';
+import {closestElement, elementExists} from 'select-dom';
 
-import {isMac} from '../github-helpers';
-import features from '.';
+import features from '../feature-manager.js';
+import {modifierKey} from '../github-helpers/hotkey.js';
 
-function addQuickSubmit(): void {
-	select('input#commit-summary-input')!.classList.add('js-quick-submit');
-}
-
-function onKeyDown(event: delegate.Event<KeyboardEvent, HTMLInputElement>): void {
+function onKeyDown(event: DelegateEvent<KeyboardEvent, HTMLInputElement>): void {
 	const field = event.delegateTarget;
 	const form = field.form!;
 	if (
@@ -18,62 +15,62 @@ function onKeyDown(event: delegate.Event<KeyboardEvent, HTMLInputElement>): void
 		|| event.ctrlKey
 		|| event.metaKey
 		|| event.isComposing // #4323
-		|| select.exists([
-			'.suggester', // GitHub’s autocomplete dropdown
+		|| elementExists([
+			'.suggester', // GitHub's autocomplete dropdown
 			'.rgh-avoid-accidental-submissions',
+
+			// Don't handle event if the form can't be submitted already
+			'button[data-hotkey="Mod+Enter"]:disabled',
+			'button[type="submit"]:disabled',
 		], form)
 	) {
 		return;
 	}
 
-	if (select.exists('.btn-primary[type="submit"]:disabled', form)) {
-		return;
-	}
-
-	const spacingClasses = pageDetect.isNewFile() || pageDetect.isEditingFile() ? 'my-1' : 'mt-2 mb-n1';
+	const spacingClasses = pageDetect.isNewFile() || pageDetect.isEditingFile()
+		? 'mb-3 mt-n2'
+		: 'mt-2 mb-n1';
 
 	const message = (
-		<p className={'rgh-avoid-accidental-submissions ' + spacingClasses}>
-			A submission via <kbd>enter</kbd> has been prevented. You can press <kbd>enter</kbd> again or use <kbd>{isMac ? 'cmd' : 'ctrl'}</kbd><kbd>enter</kbd>.
+		<p className={cx('rgh-avoid-accidental-submissions', spacingClasses)}>
+			A submission via <kbd>enter</kbd> has been prevented. You can press <kbd>enter</kbd> again or use{' '}
+			<kbd>{modifierKey}</kbd>
+			<kbd>enter</kbd>.
 		</p>
 	);
-	if (pageDetect.isNewFile() || pageDetect.isEditingFile() || pageDetect.isPRConversation()) {
-		field.after(message);
-	} else {
-		field.parentElement!.append(message);
-	}
+
+	closestElement('[data-component="TextInput"]', field).after(message);
 
 	event.preventDefault();
 }
 
-const inputElements = [
-	'form.new_issue input#issue_title',
-	'input#pull_request_title',
-	'input#commit-summary-input',
-	'#merge_title_field',
-];
-
-function init(): void {
-	delegate(document, inputElements.join(','), 'keydown', onKeyDown);
+function init(signal: AbortSignal): void {
+	delegate(
+		[
+			'input[name="pull_request[title]"]', // `isCompare`
+			'#commit-message-input', // `isEditingFile`, `isNewFile`
+		],
+		'keydown',
+		onKeyDown,
+		{signal, capture: true},
+	);
 }
 
-void features.add(__filebasename, {
+void features.add(import.meta.url, {
 	include: [
-		pageDetect.isNewIssue,
+		pageDetect.isNewFile,
 		pageDetect.isCompare,
-		pageDetect.isNewFile,
 		pageDetect.isEditingFile,
-		pageDetect.isPRConversation,
 	],
-	deduplicate: 'has-rgh-inner',
 	init,
-}, {
-	shortcuts: {
-		'ctrl enter': 'Publish a new/edited file',
-	},
-	include: [
-		pageDetect.isNewFile,
-		pageDetect.isEditingFile,
-	],
-	init: addQuickSubmit,
 });
+
+/*
+
+Test URLs:
+
+isNewFile: https://github.com/refined-github/sandbox/new/default-a
+isCompare: https://github.com/refined-github/sandbox/compare/default-a...quick-pr-branch?expand=1
+isEditingFile: https://github.com/refined-github/sandbox/edit/default-a/README.md
+
+*/

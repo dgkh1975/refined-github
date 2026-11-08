@@ -1,0 +1,86 @@
+import React from 'dom-chef';
+import * as pageDetect from 'github-url-detection';
+import ArrowUpRightIcon from 'octicons-plain-react/ArrowUpRight';
+import CodeIcon from 'octicons-plain-react/Code';
+import {elementExists} from 'select-dom';
+
+import features from '../feature-manager.js';
+import {buildRepoUrl} from '../github-helpers/index.js';
+import {branchSelector} from '../github-helpers/selectors.js';
+import {is} from '../helpers/css-selectors.js';
+import {wrapAll} from '../helpers/dom-utils.js';
+import observe from '../helpers/selector-observer.js';
+
+async function addLink(branchSelectorElement: HTMLButtonElement): Promise<void> {
+	if (
+		elementExists([
+			// If the branch picker is open, do nothing #7491
+			'#selectPanel',
+
+			// React view deduplication https://github.com/refined-github/refined-github/issues/7601
+			'.rgh-visit-tag',
+		])
+	) {
+		return;
+	}
+
+	// Uses optional chaining to emit a better error manually
+	const tag = branchSelectorElement.getAttribute('aria-label')?.replace(/ tag$/, '');
+	if (!tag) {
+		throw new Error('Tag not found in DOM. The feature needs to be updated');
+	}
+
+	wrapAll(
+		<div className="d-flex gap-2" />,
+		branchSelectorElement,
+		<a
+			className="btn px-2 tmp-px-2 tooltipped tooltipped-se rgh-visit-tag"
+			href={buildRepoUrl('releases/tag', tag)}
+			aria-label="Visit tag"
+		>
+			<ArrowUpRightIcon />
+		</a>,
+	);
+}
+
+function replaceIcon(tagIcon: SVGElement): void {
+	// https://github.com/refined-github/refined-github/issues/6499#issuecomment-1505256426
+	tagIcon.replaceWith(<CodeIcon />);
+}
+
+function clarifyIcon(signal: AbortSignal): void {
+	observe('.Link[href*="/tree/"] svg.octicon-tag', replaceIcon, {signal});
+}
+
+function init(signal: AbortSignal): void {
+	observe(is(branchSelector) + ':has(.octicon-tag)', addLink, {signal});
+}
+
+void features.add(import.meta.url, {
+	include: [
+		pageDetect.isRepoTree,
+		pageDetect.isSingleFile,
+	],
+	init,
+}, {
+	include: [
+		pageDetect.isReleasesOrTags,
+		pageDetect.isSingleReleaseOrTag,
+	],
+	init: clarifyIcon,
+});
+
+/*
+
+Test URLs:
+
+- https://github.com/refined-github/refined-github/tree/23.11.15
+- https://github.com/refined-github/refined-github/blob/23.4.10/.editorconfig
+
+Second part:
+
+- https://github.com/refined-github/refined-github/releases
+- https://github.com/refined-github/refined-github/releases/tag/23.11.15
+- https://github.com/saadeghi/daisyui/releases/tag/v4.4.15
+
+*/

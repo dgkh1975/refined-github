@@ -1,16 +1,31 @@
-import mem from 'mem';
+import memoize from 'memoize';
 
-const onElementRemoval = mem(
-	async (element: Element): Promise<void> => (
-		new Promise(resolve => {
-			new ResizeObserver(([{target}], observer) => {
-				if (!target.isConnected) {
-					observer.disconnect();
-					resolve();
-				}
-			}).observe(element);
-		})
-	),
-);
+const onElementRemoval = memoize(async (element: Element, signal?: AbortSignal): Promise<void> => {
+	if (signal?.aborted) {
+		return;
+	}
+
+	return new Promise(resolve => {
+		const observer = new ResizeObserver(([{target}]) => {
+			if (target.isConnected) {
+				return;
+			}
+
+			observer.disconnect();
+			resolve();
+		});
+
+		if (signal) {
+			signal.addEventListener('abort', () => {
+				observer.disconnect();
+				resolve();
+			}, {
+				once: true,
+			});
+		}
+
+		observer.observe(element);
+	});
+});
 
 export default onElementRemoval;

@@ -1,47 +1,92 @@
 import './sticky-sidebar.css';
-import select from 'select-dom';
+
+import {onAbort} from 'abort-utils';
 import debounce from 'debounce-fn';
-import {observe} from 'selector-observer';
 import * as pageDetect from 'github-url-detection';
 
-import features from '.';
+import features from '../feature-manager.js';
+import calculateCssCalcString from '../helpers/calculate-css-calc-string.js';
+import observe from '../helpers/selector-observer.js';
 
-const deinit: VoidFunction[] = [];
-// Both selectors are present on conversation pages so we need to discriminate
-const sidebarSelector = pageDetect.isRepoRoot() ? '.repository-content .flex-column > .flex-shrink-0 > [data-pjax]' : '#partial-discussion-sidebar';
+const minimumViewportWidthForSidebar = 768; // Less than this, the layout is single-column
+
+const sidebarSelector = [
+	'#partial-discussion-sidebar', // `isDiscussion`, `isPRConversation`
+	'div[class^="prc-PageLayout-Pane"]:has(> rails-partial[data-partial-name="codeViewRepoRoute.Sidebar"])', // `isRepoRoot`
+];
+
+let sidebar: HTMLElement | undefined;
 
 function updateStickiness(): void {
-	const sidebar = select(sidebarSelector)!;
-	const margin = pageDetect.isConversation() ? 60 : 0; // 60 matches sticky header's height
-	sidebar.classList.toggle('rgh-sticky-sidebar', sidebar.offsetHeight + margin < window.innerHeight);
+	if (!sidebar) {
+		return;
+	}
+
+	const offset = calculateCssCalcString(getComputedStyle(sidebar).getPropertyValue('--rgh-sticky-sidebar-offset'));
+	sidebar.classList.toggle(
+		'rgh-sticky-sidebar',
+		window.innerWidth >= minimumViewportWidthForSidebar
+			&& sidebar.offsetHeight + offset <= window.innerHeight,
+	);
 }
 
 const onResize = debounce(updateStickiness, {wait: 100});
+const sidebarObserver = new ResizeObserver(onResize);
 
-function init(): void {
-	const resizeObserver = new ResizeObserver(onResize);
-	const selectObserver = observe(sidebarSelector, {
-		add(sidebar) {
-			resizeObserver.observe(sidebar, {box: 'border-box'});
-		},
-	});
-	window.addEventListener('resize', onResize);
-	deinit.push(() => {
-		selectObserver.abort();
-		resizeObserver.disconnect();
-		window.removeEventListener('resize', onResize);
-	});
+// Avoid disabling the stickiness while the user is interacting with it
+function toggleHoverState(event: MouseEvent): void {
+	const isHovered = event.type === 'mouseenter';
+	if (isHovered) {
+		sidebarObserver.disconnect();
+	} else {
+		// Also immediately calls `onResize`, so it has the welcome side effect of unsticking the sidebar if its height changes
+		sidebarObserver.observe(sidebar!);
+	}
 }
 
-void features.add(__filebasename, {
+// Can't use delegate because it's not efficient to track mouse events across the document
+function trackSidebar(signal: AbortSignal, foundSidebar: HTMLElement): void {
+	sidebar = foundSidebar;
+	sidebar.style.height = 'min-content';
+
+	sidebarObserver.observe(sidebar);
+	onAbort(signal, sidebarObserver, () => {
+		sidebar = undefined;
+	});
+
+	sidebar.addEventListener('mouseenter', toggleHoverState, {signal});
+	sidebar.addEventListener('mouseleave', toggleHoverState, {signal});
+}
+
+function init(signal: AbortSignal): void {
+	document.documentElement.setAttribute('rgh-sticky-sidebar-enabled', '');
+
+	// The element is recreated when the page is updated
+	// `trackSidebar` also triggers the first update via `sidebarObserver.observe()`
+	observe(sidebarSelector, trackSidebar.bind(undefined, signal), {signal});
+
+	// Update it when the window is resized
+	window.addEventListener('resize', onResize, {signal});
+}
+
+void features.add(import.meta.url, {
 	include: [
 		pageDetect.isRepoRoot,
-		pageDetect.isConversation,
+		pageDetect.isPRConversation,
+		pageDetect.isDiscussion,
 	],
 	exclude: [
-		pageDetect.isEmptyRepoRoot,
+		() => screen.availWidth < minimumViewportWidthForSidebar,
 	],
-	deduplicate: 'has-rgh-inner',
 	init,
-	deinit,
 });
+
+/*
+
+Test URLs:
+
+- Repo: https://github.com/refined-github/refined-github
+- PR conversation: https://github.com/refined-github/refined-github/pull/755
+- Discussion: https://github.com/orgs/community/discussions/40299
+
+*/

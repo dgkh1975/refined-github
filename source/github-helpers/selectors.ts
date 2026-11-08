@@ -1,0 +1,343 @@
+import {css} from 'code-tag';
+
+import {is, not} from '../helpers/css-selectors.js';
+
+const requiresLogin: UrlMatch[] = [];
+
+export type UrlMatch = [expectations: number, url: string];
+
+// GitHub uses different render strategies depending on the "Command Palette" Feature Preview setting
+// - Enabled: Catalyst is used, and `.loaded` is present
+// - Disabled: SSR is used, and `[data-render-ssr]` is present
+export const loaded = ':is(.loaded, [data-render-ssr])';
+export const loaded_ = [
+	[1, 'https://github.com/refined-github/refined-github'],
+] satisfies UrlMatch[];
+
+export const standaloneGistLinkInMarkdown = `
+	:is(.js-comment-body, .react-issue-comment, .react-issue-body) p a:only-child:is(
+		[href^="https://gist.github.com/"],
+		[href^="${location.origin}/gist/"]
+	)
+` as const;
+export const standaloneGistLinkInMarkdown_ = [
+	[3, 'https://github.com/refined-github/sandbox/issues/77'],
+] satisfies UrlMatch[];
+
+export const branchSelector = [
+	'#ref-picker-repos-header-ref-selector-wide', // `isSingleFile` with sidebar closed
+	'#ref-picker-repos-header-ref-selector', // `isSingleFile` with sidebar open; `isRepoRoot`
+	// TODO [2027-01-01]: Drop
+	'[data-hotkey="w"]',
+];
+export const branchSelector_ = [
+	[1, 'https://github.com/refined-github/refined-github'],
+	// Added via JS :(
+	[0, 'https://github.com/refined-github/refined-github/blob/main/readme.md'],
+	[0, 'https://github.com/refined-github/refined-github/blame/main/readme.md'],
+	[0, 'https://github.com/refined-github/refined-github/tree/main/source'],
+	[1, 'https://github.com/refined-github/sandbox/tree/branch/with/slashes'],
+	[1, 'https://github.com/refined-github/sandbox/commits/branch/with/slashes'],
+	[1, 'https://github.com/refined-github/sandbox/commits'],
+] satisfies UrlMatch[];
+
+// .color-fg-muted selects only files; some icon extensions use `img` tags
+export const directoryListingFileIcon =
+	'.react-directory-filename-column > :is(svg, img):is(.color-fg-muted, .octicon-file-symlink-file)';
+export const directoryListingFileIcon_ = [
+	[18, 'https://github.com/refined-github/refined-github'],
+	[3, 'https://github.com/refined-github/refined-github/tree/main/.github'],
+] satisfies UrlMatch[];
+
+export const prCommit = '.TimelineItem--condensed:has(.octicon-git-commit)';
+export const prCommit_ = [
+	[1, 'https://github.com/refined-github/sandbox/pull/10'],
+] satisfies UrlMatch[];
+
+// `summary` is needed because the details dropdown contains the list of check runs, each with its status icon
+export const prCommitStatusIcon = `:is(${prCommit}) details.commit-build-statuses summary .octicon`;
+export const prCommitStatusIcon_ = [
+	// Icon not loaded when logged out :(
+	[0, 'https://github.com/refined-github/sandbox/pull/10'],
+] satisfies UrlMatch[];
+
+export const openPrsListLink = [
+	// `.color-fg-open` is needed because of the icon added by `highlight-non-default-base-branch`
+	css`
+		.js-issue-row:has(
+			.octicon-git-pull-request.color-fg-open,
+			.octicon-git-pull-request-draft
+		) a.js-navigation-open
+	`,
+	// React issue list
+	css`
+		li[role="listitem"] h3 a[data-hovercard-url*="/pull"]
+	`,
+	// React PR list
+	css`li[class*="listItem"] [class*="heading"] > a[class*="anchor"][href*="/pull/"]`,
+];
+
+export const openPrsListLink_ = [
+	[4, 'https://github.com/refined-github/sandbox/issues?q=conflict'],
+] satisfies UrlMatch[];
+
+export const commentsCountInLists = [
+	// Issue list:
+	'div[data-testid="list-row-comments"]:not(:empty)',
+	'ul[aria-label="Drag and drop pinned issues list."] div[class*="commentCountContainer"]',
+
+	// React PR list
+	css`li[class*="listItem"] div[class*="metadata"]:has(> svg.octicon-comment)`,
+
+	// Legacy PR list
+	// aria-label="1 comment"
+	// aria-label="2 comments"
+	'.js-issue-row a.Link--muted[aria-label*=" comment"]',
+];
+export const commentsCountInLists_ = [
+	[2, 'https://github.com/refined-github/sandbox/labels/bug'],
+	[1, 'https://github.com/refined-github/refined-github/pulls?q=is%3Apr+is%3Aclosed+comments%3A%3E0'],
+] satisfies UrlMatch[];
+
+export const paginationButtonSelector = '.ajax-pagination-form button.ajax-pagination-btn';
+export const paginationButtonSelector_ = [
+	[2, 'https://github.com/refined-github/sandbox/pull/10'],
+] satisfies UrlMatch[];
+
+export const codeSearchHeader = css`
+	div:has(
+		> [aria-label^="Collapse "],
+		> [aria-label^="Expand "]
+	)
+`;
+export const codeSearchHeader_ = [
+	// Search not available when logged out :(
+	[0, 'https://github.com/search?q=repo%3Arefined-github%2Frefined-github&type=code'],
+] satisfies UrlMatch[];
+
+// Excludes /pulls/* and /issues/* global pages since they're already sorted by update time #9604
+export const linksToConversationLists = `
+	a:is(
+		[href*="/issues"],
+		[href*="/pulls"],
+		[href*="/projects"],
+		[href*="/labels/"]
+	):not(
+		[href^="/pulls"],
+		[href^="/issues"],
+
+		[href*="/issues/labels"],
+		[href*="/issues/views"],
+		[href*="sort%3A"],
+		[href*="page="],
+		.issues-reset-query,
+		.pagination *,
+		.table-list-header-toggle *
+	)
+`;
+export const linksToConversationLists_ = [
+	[6, 'https://github.com/fregante/iphone-inline-video/issues?q=cool+is%3Aissue+is%3Aopen+'],
+	[26, 'https://github.com/fregante/iphone-inline-video/issues?q=cool+is%3Aissue+is%3Aclosed'],
+] satisfies UrlMatch[];
+
+export const newCommentField = [
+	// PR comment
+	'file-attachment[input="fc-new_comment_field"]',
+
+	// PR review comment, conversation tab
+	'file-attachment[input^="fc-new_inline_comment_discussion"]',
+
+	// PR Review comment, files tab
+	'div[class*="AddCommentEditor"] textarea',
+
+	// Issue comment
+	'textarea[aria-labelledby="comment-composer-heading"]',
+];
+
+export const newCommentField_ = requiresLogin;
+
+export const commentSelector = is(
+	`${loaded} .react-issue-body`, // Issue description
+	'.react-issue-comment', // Issue comment
+	'[data-testid="review-thread"] > div', // Review thread comment
+	'.js-comment', // PR description or comment
+);
+export const commentSelector_ = [
+	[1, 'https://github.com/refined-github/refined-github/issues/10317'],
+] satisfies UrlMatch[];
+
+// [data-component="IconButton"] includes only React buttons
+// :not([id^="task-list-menu"]) excludes task list (Convert to issue/sub-issue, etc) menu buttons
+export const commentMenuButton =
+	`${commentSelector} button[data-component="IconButton"]:has(> .octicon-kebab-horizontal):not([id^="task-list-menu"])`;
+export const commentMenuButton_ = [
+	[1, 'https://github.com/refined-github/refined-github/issues/10317'],
+] satisfies UrlMatch[];
+
+// The dropdown menu in the header of PR comments
+export const prCommentMenu = '.timeline-comment-actions > details:last-child';
+export const prCommentMenu_ = [
+	[4, 'https://github.com/NixOS/nixpkgs/pull/147010'],
+] satisfies UrlMatch[];
+
+export const legacyCommentField = 'textarea#new_comment_field';
+// Used on: PR conversations, gists and discussions
+export const legacyCommentField_ = requiresLogin;
+
+export const commitHashLinkInLists = [
+	'[data-testid="commit-row-browse-repo"]', // `isCommitList`
+	'a[id^="commit-details-"]', // `isPRCommitList`
+	'.js-details-container .text-right code a.Link--secondary', // `isPRConversation`
+] as unknown as Array<'a'>;
+export const commitHashLinkInLists_ = [
+	[
+		35,
+		'https://github.com/typed-ember/ember-cli-typescript/commits/master?after=5ff0c078a4274aeccaf83382c0d6b46323f57397+174',
+	],
+	[4, 'https://github.com/refined-github/refined-github/pull/6194/commits'],
+	[5, 'https://github.com/refined-github/refined-github/pull/6194#event-8016526003'],
+] satisfies UrlMatch[];
+
+export const commitTitleInLists = [
+	'[data-testid="commit-row-item"] h4', // `isCommitList`
+	'.js-commits-list-item > .js-details-container > p:first-child', // `isCompare`
+];
+export const commitTitleInLists_ = [
+	[
+		35,
+		'https://github.com/typed-ember/ember-cli-typescript/commits/master?after=5ff0c078a4274aeccaf83382c0d6b46323f57397+174',
+	],
+	[4, 'https://github.com/refined-github/refined-github/pull/6194/commits'],
+];
+
+const botNames = [
+	'actions-user',
+	'bors',
+	'ImgBotApp',
+	'renovate-bot',
+	'rust-highfive',
+	'scala-steward',
+	'weblate',
+	'apps', // Matches any `/apps/*` URLs
+	'github-apps', // GHE apps
+] as const;
+
+const botAttributes = botNames.map(bot => `[href^="/${bot}"]`);
+
+// All co-authored commits are excluded because it's unlikely that any bot co-authors with another bot, but instead they're co-authored with a human. In that case we don't want to dim the commit.
+// ^= is needed to match /apps/* URLs
+export const botLinksCommitSelectors = [
+	// Co-authored commits are excluded because their avatars are not linked
+	'a[data-testid="avatar-icon-link"]' + is(botAttributes),
+
+	// Legacy view, still used by PR commits
+	// :only-child excludes co-authored commits
+	'a[data-test-selector="commits-avatar-stack-avatar-link"]' + is(botAttributes) + ':only-child',
+];
+export const botLinksCommitSelectors_ = [
+	[1, 'https://github.com/ivogabe/gulp-typescript/commits/master/?since=2019-08-04&until=2019-11-03'],
+];
+
+export const botLinksPrSelectors = [
+	...botNames.flatMap(bot => [
+		`.opened-by [title$="pull requests created by ${bot}"]`,
+		`.opened-by [title$="pull requests opened by ${bot}"]`,
+	]),
+	'.opened-by [href*="author%3Aapp%2F"]', // Search query `is:pr+author:app/*`
+	'.labels [href$="label%3Abot"]', // PR tagged with `bot` label
+
+	// React PR lists
+	'a[data-testid="author-filter-link"][aria-label$="[bot]"]',
+	'a[data-testid="author-filter-link"][href*="author%3Aapp%2F"]',
+	...botNames.map(bot => `a[data-testid="author-filter-link"][aria-label$=" ${bot}"]`),
+	'button[aria-label="Filter by label bot"]', // PR tagged with `bot` label
+];
+export const botLinksPrSelectors_ = [
+	[1, 'https://github.com/sun-zheng-an/gulp-shell/pulls?q=sort%3Aupdated-desc+is%3Apr+is%3Aclosed+lodash'],
+	[25, 'https://github.com/OctoLinker/OctoLinker/pulls?q=is%3Apr+is%3Aclosed'],
+];
+
+export const botLinksNotificationSelectors = [
+	// Only select if the bot is the primary author (last in DOM, first in avatar list)
+	'.AvatarStack-body a.avatar:last-child' + is(botAttributes),
+];
+export const botLinksNotificationSelectors_ = [
+	[0, 'https://github.com/notifications'],
+] satisfies UrlMatch[];
+
+// `a` selector needed to skip commits by non-GitHub users
+const authorLinks = [
+	// Old views
+	'.js-discussion a.author',
+	'.inline-comments a.author',
+	// React-based views
+	'[data-testid="comment-header"] a[data-testid="avatar-link"]',
+	'a[data-testid="issue-body-header-author"]',
+	'a[class*="eventActorLink"]',
+] as const;
+
+const authorLinksException = [
+	// # targets mannequins #6504
+	'[href="#"]',
+	'[href*="/apps/"]',
+	'[href*="/marketplace/"]',
+	'[data-hovercard-type="organization"]',
+	// For GHE: https://github.com/refined-github/refined-github/issues/7232#issuecomment-1910803157
+	'[show_full_name="true"]',
+] as const;
+
+export const usernameLinksSelector = [
+	is(authorLinks) + not(authorLinksException),
+
+	// On dashboard
+	// `.Link--primary` excludes avatars
+	// [aria-label="card content"] excludes links in cards #6530 #6915
+	'#dashboard a.Link--primary[data-hovercard-type="user"]:not([aria-label="card content"] *)',
+	'.feed-item-content header a.Link--primary',
+] as unknown as Array<'a'>;
+export const usernameLinksSelector_ = [
+	[1, 'https://github.com/refined-github/refined-github/issues/7747'],
+];
+
+export const actionBar = [
+	'fieldset [data-component="ActionBar"]', // React component; `fieldset` avoids #10093
+	'action-bar', // Still used in gists, PRs, etc
+];
+export const actionBar_ = requiresLogin;
+
+export const prMergeabilityBoxCaption = 'section[aria-label="Conflicts"] h3 + .fgColor-muted';
+export const prMergeabilityBoxCaption_ = requiresLogin;
+
+export const deletedHeadRepository = 'span[title="This repository has been deleted"]';
+
+export const deletedHeadRepository_ = [
+	[2, 'https://github.com/refined-github/refined-github/pull/271'],
+	[1, 'https://github.com/refined-github/refined-github/pull/271/files'],
+];
+
+export const conversationCloseEvent = [
+	// Old view (PRs)
+	`.TimelineItem:has(.TimelineItem-badge :is(
+		.octicon-issue-closed,
+		.octicon-git-merge,
+		.octicon-git-pull-request-closed,
+		.octicon-skip
+	))`,
+	// React view (Issues)
+	'[data-timeline-event-id]:has([data-testid="state-reason-link"])',
+];
+export const conversationCloseEvent_ = [
+	[4, 'https://github.com/refined-github/sandbox/issues/123'],
+	[4, 'https://github.com/refined-github/refined-github/pull/4030'],
+];
+
+export const confirmMergeButton = '[data-testid="mergebox-partial"] [class*="ConfirmMerge"] ~ div button:first-child';
+export const confirmMergeButton_ = requiresLogin;
+
+/* NOTE: Must be a hash, not a generic selector */
+export const commentBoxHashPr = '#issue-comment-box';
+export const commentBoxHashPr_ = requiresLogin;
+
+/* NOTE: Must be a hash, not a generic selector */
+export const commentBoxHashIssue = '#react-issue-comment-composer';
+export const commentBoxHashIssue_ = requiresLogin;

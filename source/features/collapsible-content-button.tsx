@@ -1,15 +1,29 @@
+import cx from 'clsx';
+import delegate, {type DelegateEvent} from 'delegate-it';
 import React from 'dom-chef';
-import select from 'select-dom';
-import delegate from 'delegate-it';
-import {FoldDownIcon} from '@primer/octicons-react';
 import * as pageDetect from 'github-url-detection';
-import * as textFieldEdit from 'text-field-edit';
+import FoldDownIcon from 'octicons-plain-react/FoldDown';
+import {$, closestElement} from 'select-dom';
+import {insertTextIntoField} from 'text-field-edit';
 
-import features from '.';
-import smartBlockWrap from '../helpers/smart-block-wrap';
+import features from '../feature-manager.js';
+import {actionBar} from '../github-helpers/selectors.js';
+import observe from '../helpers/selector-observer.js';
+import smartBlockWrap from '../helpers/smart-block-wrap.js';
 
-function addContentToDetails({delegateTarget}: delegate.Event<MouseEvent, HTMLButtonElement>): void {
-	const field = delegateTarget.form!.querySelector('textarea')!;
+function addContentToDetails({delegateTarget}: DelegateEvent<MouseEvent, HTMLButtonElement>): void {
+	const container = closestElement([
+		'form',
+		'[data-testid="comment-composer"]', // Add comment form
+		'[class*="container"]:has([class*="textArea"] textarea)', // Edit comment form
+	], delegateTarget);
+
+	/* There's only one rich-text editor even when multiple fields are visible; the class targets it #5303 */
+	const field = $([
+		'textarea.js-comment-field', // Legacy, found in some secondary forms
+		'textarea[aria-labelledby="comment-composer-heading"]', // Add comment textarea
+		'[class*="textArea"] textarea', // Edit comment textarea
+	], container);
 	const selection = field.value.slice(field.selectionStart, field.selectionEnd);
 
 	// Don't indent <summary> because indentation will not be automatic on multi-line content
@@ -20,10 +34,10 @@ function addContentToDetails({delegateTarget}: delegate.Event<MouseEvent, HTMLBu
 		${selection}
 
 		</details>
-	`.replace(/(\n|\b)\t+/g, '$1').trim();
+	`.replaceAll(/(?<=\n|\b)\t+/g, '').trim();
 
 	field.focus();
-	textFieldEdit.insert(field, smartBlockWrap(newContent, field));
+	insertTextIntoField(field, smartBlockWrap(newContent, field));
 
 	// Restore selection.
 	// `selectionStart` will be right after the newly-inserted text
@@ -33,21 +47,66 @@ function addContentToDetails({delegateTarget}: delegate.Event<MouseEvent, HTMLBu
 	);
 }
 
-function init(): void {
-	delegate(document, '.rgh-collapsible-content-btn', 'click', addContentToDetails);
-	for (const anchor of select.all('md-ref')) {
-		anchor.after(
-			<button type="button" className="toolbar-item tooltipped tooltipped-sw rgh-collapsible-content-btn" aria-label="Add collapsible content">
-				<FoldDownIcon/>
-			</button>,
-		);
-	}
+function append(container: HTMLElement): void {
+	const classes = [
+		'Button',
+		'Button--iconOnly',
+		'Button--invisible',
+		'Button--medium',
+		'tooltipped',
+		'tooltipped-sw',
+		'rgh-collapsible-content-btn',
+
+		// Old view only
+		'my-auto',
+		'flex-shrink-0',
+	];
+
+	// TODO: ensure it's added only once before both `table-input` and `collapsible-content-button`
+	const divider = $([
+		'[data-component="ActionBar.VerticalDivider"]', // React component
+		'.ActionBar-divider', // Still used in gists, PRs, etc
+	], container).cloneNode(true);
+
+	Object.assign(divider.style, {
+		// Sizing copied from GitHub, except the excessive 2em (see `fuchsia` docs)
+		margin: 'auto var(--base-size-8, 2em)',
+
+		// Old style only
+		top: 'initial',
+		bottom: 'initial',
+		transform: 'initial',
+	});
+
+	container.parentElement!.append(
+		divider,
+		<button
+			type="button"
+			className={cx(classes)}
+			aria-label="Add collapsible content"
+			data-targets="action-bar.items" // Enables automatic hiding when it doesn't fit
+		>
+			<FoldDownIcon />
+		</button>,
+	);
 }
 
-void features.add(__filebasename, {
+function init(signal: AbortSignal): void {
+	observe(actionBar, append, {signal});
+	delegate('.rgh-collapsible-content-btn', 'click', addContentToDetails, {signal, capture: true});
+}
+
+void features.add(import.meta.url, {
 	include: [
 		pageDetect.hasRichTextEditor,
 	],
-	deduplicate: 'has-rgh-inner',
 	init,
 });
+
+/*
+
+Test URLs:
+
+- Any issue or PR
+
+*/

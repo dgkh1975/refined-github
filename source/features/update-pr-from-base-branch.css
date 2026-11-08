@@ -1,0 +1,6 @@
+section[aria-label='Conflicts']
+	div[class*='contentLayout']:has(> .ButtonGroup) {
+	> div[class^='prc-ButtonGroup'] {
+		display: none;
+	}
+}

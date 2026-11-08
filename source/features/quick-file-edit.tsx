@@ -1,41 +1,70 @@
 import './quick-file-edit.css';
+
 import React from 'dom-chef';
-import select from 'select-dom';
-import {PencilIcon} from '@primer/octicons-react';
 import * as pageDetect from 'github-url-detection';
+import PencilIcon from 'octicons-plain-react/Pencil';
+import {$, closestElement} from 'select-dom';
 
-import {wrap} from '../helpers/dom-utils';
-import features from '.';
-import GitHubURL from '../github-helpers/github-url';
-import {isPermalink} from '../github-helpers';
-import getDefaultBranch from '../github-helpers/get-default-branch';
-import onFileListUpdate from '../github-events/on-file-list-update';
+import features from '../feature-manager.js';
+import GitHubFileUrl from '../github-helpers/github-file-url.js';
+import {isArchivedRepoAsync, isPermalink} from '../github-helpers/index.js';
+import {directoryListingFileIcon} from '../github-helpers/selectors.js';
+import {wrap} from '../helpers/dom-utils.js';
+import observe from '../helpers/selector-observer.js';
 
-async function init(): Promise<void> {
-	const isPermalink_ = await isPermalink();
-	for (const fileIcon of select.all('.js-navigation-container .octicon-file')) {
-		const fileLink = fileIcon.closest('.js-navigation-item')!.querySelector('a.js-navigation-open')!;
-		const url = new GitHubURL(fileLink.href).assign({
-			route: 'edit',
-		});
+// Only directories are expandable; the child combinator excludes the pencil that this feature adds
+const sidebarFileIcon = '[role="treeitem"]:not([aria-expanded]) .PRIVATE_TreeView-item-visual > svg';
 
-		if (isPermalink_) {
-			// eslint-disable-next-line no-await-in-loop
-			url.branch = await getDefaultBranch(); // Permalinks can't be edited
-		}
-
-		wrap(fileIcon, <a href={String(url)} className="rgh-quick-file-edit"/>);
-		fileIcon.after(<PencilIcon/>);
-	}
+function addIcon(fileIcon: Element, url: GitHubFileUrl): void {
+	wrap(fileIcon, <a href={url.href} className="rgh-quick-file-edit" />);
+	fileIcon.after(<PencilIcon />);
 }
 
-void features.add(__filebasename, {
+async function linkifyIcon(fileIcon: Element): Promise<void> {
+	const fileLink = $('.react-directory-filename-cell a', fileIcon.parentElement!);
+
+	const url = new GitHubFileUrl(fileLink.href).assign({
+		route: 'edit',
+	});
+
+	addIcon(fileIcon, url);
+}
+
+function linkifySidebarIcon(fileIcon: Element): void {
+	// The sidebar items aren't links, but their ID holds the path
+	const {id} = closestElement('[role="treeitem"]', fileIcon);
+
+	const url = new GitHubFileUrl(location.href).assign({
+		route: 'edit',
+		filePath: id.replace(/-item$/, ''),
+	});
+
+	addIcon(fileIcon, url);
+}
+
+async function init(signal: AbortSignal): Promise<void | false> {
+	observe(directoryListingFileIcon, linkifyIcon, {signal});
+	observe(sidebarFileIcon, linkifySidebarIcon, {signal});
+}
+
+void features.add(import.meta.url, {
 	include: [
 		pageDetect.isRepoTree,
+		pageDetect.isSingleFile, // The sidebar appears here too
 	],
-	additionalListeners: [
-		onFileListUpdate,
+	exclude: [
+		pageDetect.is404,
+		isArchivedRepoAsync,
+		isPermalink,
 	],
-	deduplicate: '.rgh-quick-file-edit', // #3945
 	init,
 });
+
+/*
+
+Test URLs
+
+Legacy views: https://github.com/refined-github/refined-github
+React views: https://github.com/refined-github/refined-github/tree/main/.github
+
+*/

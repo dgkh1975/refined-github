@@ -1,82 +1,170 @@
+import batchedFunction from 'batched-function';
 import React from 'dom-chef';
-import select from 'select-dom';
 import * as pageDetect from 'github-url-detection';
-import {GitPullRequestIcon} from '@primer/octicons-react';
+import GitPullRequestIcon from 'octicons-plain-react/GitPullRequest';
+import {$, closestElement, elementExists} from 'select-dom';
 
-import features from '.';
-import * as api from '../github-helpers/api';
-import {buildRepoURL} from '../github-helpers';
-import getDefaultBranch from '../github-helpers/get-default-branch';
+import features from '../feature-manager.js';
+import api from '../github-helpers/api.js';
+import abbreviateString from '../helpers/abbreviate-string.js';
+import observe from '../helpers/selector-observer.js';
 
-interface BranchInfo {
-	baseRef: string;
-	baseRefName: string;
+type BaseBranch = {
+	ref: string | undefined;
+	refName: string;
+};
+
+type Pr = {
+	link: HTMLAnchorElement;
+	owner: string;
+	repo: string;
+	number: number;
+};
+
+function getRow(prLink: HTMLElement): HTMLElement | undefined {
+	return closestElement([
+		'.js-issue-row', // Legacy DOM
+		'li',
+	], prLink);
 }
 
 function isClosed(prLink: HTMLElement): boolean {
-	return Boolean(prLink.closest('.js-issue-row')!.querySelector('.octicon.merged, .octicon.closed'));
+	return elementExists([
+		// Legacy DOM
+		'.octicon.merged',
+		'.octicon.closed',
+		// React DOM
+		'.octicon-git-merge',
+		'.octicon-git-pull-request-closed',
+	], getRow(prLink));
 }
 
-function buildQuery(issueIds: string[]): string {
-	return `
-		repository() {
-			${issueIds.map(id => `
-				${id}: pullRequest(number: ${id.replace(/\D/g, '')}) {
-					baseRef {id}
-					baseRefName
-				}
-			`).join('\n')}
-		}
-	`;
+// GitHub's own stacked PR indicator already says the PR isn't going to the default branch
+function isStacked(prLink: HTMLElement): boolean {
+	return elementExists('.octicon-stack', getRow(prLink));
 }
 
-async function init(): Promise<false | void> {
-	const prLinks = select.all('.js-issue-row .js-navigation-open[data-hovercard-type="pull_request"]');
-	if (prLinks.length === 0) {
-		return false;
-	}
+function buildQuery(prsByRepo: Map<string, Pr[]>): string {
+	return [...prsByRepo.values()].map(prs => {
+		const {owner, repo} = prs[0];
+		return `
+			${api.escapeKey('repo', owner, repo)}: repository(owner: "${owner}", name: "${repo}") {
+				nameWithOwner
+				defaultBranchRef { name }
+					${
+						prs.map(pr => `
+						${api.escapeKey('pr', pr.number)}: pullRequest(number: ${pr.number}) {
+							ref: baseRef { id }
+							refName: baseRefName
+						}
+					`).join('\n')
+					}
+			}
+		`;
+	}).join('\n');
+}
 
-	const query = buildQuery(prLinks.map(pr => pr.id));
-	const [data, defaultBranch] = await Promise.all([
-		api.v4(query),
-		getDefaultBranch(),
-	]);
+function renderBranches(pr: Pr, baseBranch: BaseBranch, nameWithOwner: string): void {
+	const branch = baseBranch.ref && `/${nameWithOwner}/tree/${baseBranch.refName}`;
+	const displayName = abbreviateString(baseBranch.refName, 25);
 
-	for (const prLink of prLinks) {
-		const pr: BranchInfo = data.repository[prLink.id];
-		if (pr.baseRefName === defaultBranch) {
+	const badge = (
+		<span className="ml-2 tmp-ml-2">
+			<GitPullRequestIcon />
+			{' To '}
+			<span
+				className="commit-ref user-select-contain mb-n1 tmp-mb-n1"
+				style={branch ? {} : {textDecoration: 'line-through'}}
+			>
+				<a title={branch ? baseBranch.refName : 'Deleted'} href={branch}>
+					{displayName}
+				</a>
+			</span>
+		</span>
+	);
+
+	const metadataRow = pr.link.matches('.js-issue-row *')
+		// Legacy DOM
+		? $('.text-small.color-fg-muted .d-none.d-md-inline-flex', pr.link.parentElement!)
+		// React DOM
+		: closestElement('li', pr.link).querySelector([
+			'div[data-testid="list-row-repo-name-and-number"]', // Issue list
+			'div[class*="description"]', // PR list
+		])!;
+	metadataRow.append(badge);
+}
+
+async function add(prLinks: HTMLAnchorElement[]): Promise<void> {
+	const prs = new Set<Pr>();
+	for (const link of prLinks) {
+		if (isStacked(link)) {
 			continue;
 		}
 
-		// Avoid noise on old PRs pointing to `master` #3910
-		// If the PR is open, it means that `master` still exists
-		if (pr.baseRefName === 'master' && isClosed(prLink)) {
-			continue;
+		const [, owner, repo, , number] = link.pathname.split('/', 5);
+		prs.add({
+			link,
+			owner,
+			repo,
+			number: Number(number),
+		});
+	}
+
+	if (prs.size === 0) {
+		return;
+	}
+
+	const prsByRepo = Map.groupBy(prs, pr => `${pr.owner}/${pr.repo}`);
+	const data = await api.v4(buildQuery(prsByRepo));
+
+	for (const repoPrs of prsByRepo.values()) {
+		const {owner, repo} = repoPrs[0];
+		const repository = data[api.escapeKey('repo', owner, repo)];
+		const defaultBranch = repository.defaultBranchRef.name;
+		for (const pr of repoPrs) {
+			const baseBranch: BaseBranch = repository[api.escapeKey('pr', pr.number)];
+			if (baseBranch.refName === defaultBranch) {
+				continue;
+			}
+
+			// Avoid noise on old PRs pointing to `master` #3910
+			// If the PR is open, it means that `master` still exists
+			if (baseBranch.refName === 'master' && isClosed(pr.link)) {
+				continue;
+			}
+
+			renderBranches(pr, baseBranch, repository.nameWithOwner);
 		}
-
-		const branch = pr.baseRef && buildRepoURL(`tree/${pr.baseRefName}`);
-
-		prLink.parentElement!.querySelector('.text-small.color-text-secondary .d-none.d-md-inline-flex')!.append(
-			<span className="issue-meta-section ml-2">
-				<GitPullRequestIcon/>
-				{' To '}
-				<span
-					className="commit-ref css-truncate user-select-contain mb-n1"
-					style={(branch ? {} : {textDecoration: 'line-through'})}
-				>
-					<a title={branch ? pr.baseRefName : 'Deleted'} href={branch}>
-						{pr.baseRefName}
-					</a>
-				</span>
-			</span>,
-		);
 	}
 }
 
-void features.add(__filebasename, {
+async function init(signal: AbortSignal): Promise<false | void> {
+	observe(
+		[
+			'.js-issue-row a[data-hovercard-type="pull_request"]', // Repo and global PR lists
+			'li[class*="listItem"] [class*="heading"] > a[class*="anchor"][href*="/pull/"]', // React issue and PR lists
+		],
+		batchedFunction(add, {delay: 100}),
+		{signal},
+	);
+}
+
+void features.add(import.meta.url, {
 	include: [
-		pageDetect.isRepoConversationList,
+		pageDetect.isIssueOrPRList,
 	],
-	deduplicate: 'has-rgh-inner',
+	requiresToken: true,
 	init,
 });
+
+/*
+
+Test URLs:
+
+- Repo PR list: https://github.com/refined-github/sandbox/pulls?q=is%3Apr+non+default
+- Repo issue list: https://github.com/refined-github/sandbox/issues?q=is%3Apr+non+default
+- Global PR list: https://github.com/pulls?q=is%3Apr+repo%3Arefined-github%2Fsandbox+non+default
+- Global issue list: https://github.com/issues?q=is%3Apr+repo%3Arefined-github%2Fsandbox+non+default
+- Stacked PRs: https://github.com/carousell/rgh-stacked-pr-sandbox/pulls
+
+*/

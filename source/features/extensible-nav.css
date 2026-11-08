@@ -1,0 +1,17 @@
+/* Hidden via .d-none, restored via content script CSS (applies to Firefox and Safari) */
+nav.rgh-extensible-nav.d-none {
+	display: flex !important;
+}
+
+.rgh-extensible-nav-removed {
+	position: absolute;
+	top: -200px;
+	left: -2000px;
+	opacity: 0.0001;
+	width: 1px;
+	pointer-events: none;
+	> ul {
+		/* If we let the native nav "overflow" into the dropdown, we lose the `aria-current` attribute */
+		width: 2000px;
+	}
+}

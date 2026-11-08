@@ -1,121 +1,240 @@
 import './reactions-avatars.css';
+
+import {onAbort} from 'abort-utils';
+import batchedFunction from 'batched-function';
 import React from 'dom-chef';
-import select from 'select-dom';
-import onetime from 'onetime';
-import {observe} from 'selector-observer';
 import {flatZip} from 'flat-zip';
 import * as pageDetect from 'github-url-detection';
+import {$$optional, closestElementOptional} from 'select-dom';
 
-import features from '.';
-import {getUsername} from '../github-helpers';
-import onElementRemoval from '../helpers/on-element-removal';
+import features from '../feature-manager.js';
+import api from '../github-helpers/api.js';
+import getUserAvatar from '../github-helpers/get-user-avatar.js';
+import {getToken} from '../github-helpers/github-token.js';
+import {getConversationNumber, getLoggedInUser} from '../github-helpers/index.js';
+import observe from '../helpers/selector-observer.js';
 
 const arbitraryAvatarLimit = 36;
 const approximateHeaderLength = 3; // Each button header takes about as much as 3 avatars
+const avatarSize = 16;
+const maxAvatarsPerReaction = 9;
 
-interface Participant {
+type Participant = {
 	button: HTMLButtonElement;
-	imageUrl: string;
-}
+	login: string;
+	avatarUrl: string;
+};
+
+// The React issue layout only lists full names, so the usernames come from the API
+const reactionTypes: Record<string, string> = {
+	'👍': 'THUMBS_UP',
+	'👎': 'THUMBS_DOWN',
+	'😄': 'LAUGH',
+	'🎉': 'HOORAY',
+	'😕': 'CONFUSED',
+	'❤️': 'HEART',
+	'🚀': 'ROCKET',
+	'👀': 'EYES',
+};
+
+const reactorsQuery = `
+	... on Reactable {
+		reactionGroups {
+			content
+			reactors(first: ${maxAvatarsPerReaction}) {
+				nodes {
+					... on Actor {
+						login
+						avatarUrl(size: ${avatarSize * 2})
+					}
+				}
+			}
+		}
+	}
+`;
 
 function getParticipants(button: HTMLButtonElement): Participant[] {
-	const currentUser = getUsername();
-	const users = button.getAttribute('aria-label')!
-		.replace(/ reacted with.*/, '')
-		.replace(/,? and /, ', ')
-		.replace(/, \d+ more/, '')
-		.split(', ');
+	let users;
 
+	if (button.getAttribute('role') === 'switch') { // [aria-label] alone is not a differentiator
+		users = button.nextElementSibling!
+			.textContent
+			.replace(/^.+including /, '')
+			.replace(/\)/, '')
+			.replace(/,? and /, ', ')
+			.replace(/, \d+ more/, '')
+			.split(', ');
+		// Uses optional chaining to throw an error manually later
+	} else if (button.nextElementSibling?.tagName === 'TOOL-TIP') {
+		// The list of people who commented is in an adjacent `<tool-tip>` element #5698
+		users = button.nextElementSibling
+			.textContent
+			.replace(/ reacted with.*/, '')
+			.replace(/,? and /, ', ')
+			.replace(/, \d+ more/, '')
+			.split(', ');
+	} else {
+		throw new Error('Unknown reaction button layout');
+	}
+
+	const currentUser = getLoggedInUser();
 	const participants = [];
-	for (const username of users) {
-		if (username === currentUser) {
+	for (const login of users) {
+		if (login === currentUser) {
 			continue;
 		}
 
-		const cleanName = username.replace('[bot]', '');
-
-		// Find image on page. Saves a request and a redirect + add support for bots
-		const existingAvatar = select<HTMLImageElement>(`[alt="@${cleanName}"]`);
-		if (existingAvatar) {
-			participants.push({button, imageUrl: existingAvatar.src});
-			continue;
-		}
-
-		// If it's not a bot, use a shortcut URL #2125
-		if (cleanName === username) {
-			const imageUrl = `/${username}.png?size=${window.devicePixelRatio * 20}`;
-			participants.push({button, imageUrl});
+		const avatarUrl = getUserAvatar(login, avatarSize);
+		if (avatarUrl) {
+			participants.push({button, login, avatarUrl});
 		}
 	}
 
 	return participants;
 }
 
-async function showAvatarsOn(commentReactions: Element): Promise<void> {
-	const avatarLimit = arbitraryAvatarLimit - (commentReactions.children.length * approximateHeaderLength);
+function appendAvatars(reactions: Participant[][]): void {
+	if (reactions.length === 0) {
+		return;
+	}
 
-	const participantByReaction = select
-		.all(':scope > button[aria-label$="emoji"]', commentReactions)
-		.map(button => getParticipants(button));
-	const flatParticipants = flatZip(participantByReaction, avatarLimit);
+	const avatarLimit = arbitraryAvatarLimit - (reactions.length * approximateHeaderLength);
+	const flatParticipants = flatZip(reactions, avatarLimit);
 
-	for (const {button, imageUrl} of flatParticipants) {
+	for (const {button, login, avatarUrl} of flatParticipants) {
 		button.append(
-			<span className="rounded-1 avatar-user avatar rgh-reactions-avatar">
-				<img src={imageUrl} className="avatar-user rounded-1"/>
+			<span className="avatar-user avatar rgh-reactions-avatar p-0 tmp-p-0 flex-self-center">
+				<img
+					src={avatarUrl}
+					className="d-block"
+					width={avatarSize}
+					height={avatarSize}
+					alt={`@${login}`}
+					loading="lazy"
+				/>
 			</span>,
 		);
 	}
+}
 
-	await onElementRemoval(commentReactions.closest('.comment-reactions')!);
-	init();
+function getCommentId(container: Element): string | undefined {
+	// Comments have a node ID, the issue description doesn't
+	return closestElementOptional('[data-wrapper-timeline-id]', container)?.dataset.wrapperTimelineId;
+}
+
+async function showReactorAvatars(containers: Element[]): Promise<void> {
+	// The token is optional, the other layouts work without it
+	const hasToken = Boolean(await getToken());
+	if (!hasToken) {
+		return;
+	}
+
+	const containersById = new Map<string | undefined, Element>(
+		containers.map(container => [getCommentId(container), container]),
+	);
+	// Dual query for issue body and individual comments
+	const data = await api.v4(`
+		repository() {
+			issueOrPullRequest(number: ${getConversationNumber()!}) {${reactorsQuery}}
+		}
+		${
+			[...containersById.keys()].filter(id => id !== undefined).map(id =>
+				`${api.escapeKey(id)}: node(id: "${id}") {${reactorsQuery}}`
+			).join('\n')
+		}
+	`);
+
+	const currentUser = getLoggedInUser();
+	for (const [id, container] of containersById) {
+		type ReactionGroup = {
+			content: string;
+			reactors: {nodes: Array<{login: string; avatarUrl: string}>};
+		};
+		const {reactionGroups}: {reactionGroups: ReactionGroup[]} = id
+			? data[api.escapeKey(id)]
+			: data.repository.issueOrPullRequest;
+		const reactions = $$optional('button[aria-checked]', container).map(button => {
+			const content = reactionTypes[button.getAttribute('aria-label')!.split(' ', 1)[0]];
+			return reactionGroups
+				.find(group => group.content === content)!.reactors.nodes
+				.filter(({login}) => login !== currentUser)
+				.map(({login, avatarUrl}) => ({button, login, avatarUrl}));
+		});
+
+		// The total limit is per comment, so each container is handled on its own
+		appendAvatars(reactions);
+	}
+}
+
+const showReactorAvatarsBatched = batchedFunction(showReactorAvatars, {delay: 100});
+
+function showAvatarsOn(reactionsContainer: Element): void {
+	const buttons = $$optional([
+		'button[aria-pressed]', // Discussions, releases, PRs, old issues
+		'button[aria-checked]', // React issues
+	], reactionsContainer);
+
+	// The latest React issue layout lists names instead of usernames, the others still work
+	// Optional chaining: some layouts have nothing after the button
+	if (buttons.some(button => button.nextElementSibling?.textContent.startsWith('Reacted by '))) {
+		showReactorAvatarsBatched(reactionsContainer);
+		return;
+	}
+
+	appendAvatars(buttons.map(button => getParticipants(button))); // Get all participants for each reaction
 }
 
 const viewportObserver = new IntersectionObserver(changes => {
 	for (const change of changes) {
-		if (change.isIntersecting) {
-			void showAvatarsOn(change.target);
-			viewportObserver.unobserve(change.target);
+		if (!change.isIntersecting) {
+			continue;
 		}
+
+		showAvatarsOn(change.target);
+		viewportObserver.unobserve(change.target);
 	}
 }, {
 	// Start loading a little before they become visible
 	rootMargin: '500px',
 });
 
-const selector = '.has-reactions .comment-reactions-options:not(.rgh-reactions)';
-
-function observeReactions(commentReactions: Element): void {
-	commentReactions.classList.add('rgh-reactions');
+function observeCommentReactions(commentReactions: Element): void {
 	viewportObserver.observe(commentReactions);
 }
 
-function init(): void {
-	for (const commentReactions of select.all(selector)) {
-		observeReactions(commentReactions);
-	}
+function init(signal: AbortSignal): void {
+	observe(
+		[
+			// `batch-deferred-content` means the participant list hasn't loaded yet
+			'.has-reactions .js-comment-reactions-options:not(batch-deferred-content .js-comment-reactions-options)',
+			'div[aria-label="Reactions"]',
+		],
+		observeCommentReactions,
+		{signal},
+	);
+	onAbort(signal, viewportObserver);
 }
 
-function discussionInit(): void {
-	observe(selector, {
-		add: observeReactions,
-	});
-}
-
-void features.add(__filebasename, {
+void features.add(import.meta.url, {
 	include: [
 		pageDetect.hasComments,
-	],
-	deduplicate: 'has-rgh-inner',
-	init,
-}, {
-	include: [
 		pageDetect.isReleasesOrTags,
-	],
-	init,
-}, {
-	include: [
+		pageDetect.isSingleReleaseOrTag,
 		pageDetect.isDiscussion,
 	],
-	init: onetime(discussionInit),
+	init,
 });
+
+/*
+Test URLs
+
+- PR: https://github.com/refined-github/refined-github/pull/4119
+- Locked PR: https://github.com/refined-github/refined-github/pull/975
+- Copilot reaction: https://github.com/refined-github/refined-github/issues/7761
+- Dependabot reaction: https://togithub.com/aio-libs/aiohttp/pull/3809#issuecomment-498809698
+- Discussion: https://github.com/parcel-bundler/parcel/discussions/6490
+- Locked discussion: https://github.com/orgs/community/discussions/28776
+- Deferred participants loading: https://github.com/orgs/community/discussions/30093
+- Releases: https://github.com/refined-github/refined-github/releases
+
+*/

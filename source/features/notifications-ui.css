@@ -1,0 +1,112 @@
+/* Matches the md query, but inverted */
+html:not([rgh-OFF-notifications-ui]) {
+	--gap: 8px;
+
+	/* `notifications-ui`, `open-all-notifications`, `select-notifications`: allow overflow */
+	/* Info: https://github.com/refined-github/refined-github/issues/5705 */
+	/* Test: */
+	/* https://github.com/notifications (Grouped by date) */
+	/* https://github.com/notifications (Grouped by repo) */
+	/* https://github.com/notifications?query=reason%3Acomment (which is an unsaved filter) */
+	.js-check-all-container .js-bulk-action-toasts ~ div .Box-header {
+		overflow: auto;
+		white-space: nowrap;
+	}
+
+	/* Mobile layout without sidebar */
+	@media screen and not (width >= 768px) {
+		/* Place top 3 dropdown buttons in a row */
+		.js-notifications-container > h1.sr-only + .d-md-none {
+			display: flex !important;
+			gap: var(--gap);
+			flex-wrap: wrap;
+		}
+
+		/* Move "Manage notifications" to the right */
+		/* Use .my-2 for extra specificity */
+		.manage-notifications-responsive.my-2 {
+			margin: 0 !important;
+			order: 10;
+		}
+	}
+
+	/* Mobile + sidebar layout */
+	@media screen and not (width >= 1012px) {
+		/* Keep the "Inbox" dropdown as wide as possible */
+		.manage-notifications-responsive + .d-flex {
+			flex-grow: 1;
+
+			/* Place "Inbox" and "Filter" on one line: GitHub makes both full width */
+			flex-wrap: nowrap !important;
+
+			> .Button--fullWidth {
+				width: auto !important;
+				flex-grow: 1;
+			}
+
+			> .notification-configure-filters {
+				width: auto !important;
+			}
+		}
+
+		/* Hide empty element that takes space in the flexbox */
+		.notification-recent-alerts:not(:has(a)) {
+			display: none !important;
+		}
+
+		/* Place Unread, Sort, Group on one line */
+		.js-check-all-container > .flex-lg-row {
+			flex-direction: row !important;
+			flex-wrap: wrap;
+			column-gap: var(--gap);
+		}
+
+		.notification-sort-by {
+			/* Move "1 new notification" to the center */
+			order: 3;
+
+			/* Align sort/group to the right */
+			margin-left: auto;
+		}
+		.notification-group-by {
+			order: 6;
+		}
+
+		/* Move search box to the bottom, unless it's missing "All|Unread" (any ?query= URL) */
+		.notifications-query-builder-wrapper:not(:first-child) {
+			order: 9;
+		}
+
+		/* Move search box inline when it's missing "All|Unread" (any ?query= URL) */
+		.notifications-query-builder-wrapper:first-child {
+			width: auto !important;
+			flex-grow: 1;
+		}
+	}
+
+	@media screen and not (width >= 544px) {
+		/* Adjust button sizing when the native media "sm" query hides the labels */
+		.js-notifications-mark-selected-actions .btn-sm {
+			padding-inline: 0.6em !important;
+			/* Use "form" to exclude our elements, which keep their labels */
+			form & .mr-1 {
+				margin: 0 !important;
+			}
+		}
+	}
+
+	/* Avoid viewport overflow when new notifications are available */
+	/* Info: https://github.com/refined-github/refined-github/issues/9658 */
+	/* Test:
+		1. Open https://github.com/notifications
+		2. Run: wrappers = $$('[data-url^="/notifications/beta/recent_notifications_alert"]');wrappers[0].innerHTML = wrappers[1].innerHTML = '<a class="h6" href="#"><span class="d-inline-block circle color-bg-accent-emphasis" style="width: 8px; height: 8px"></span> 1 new notification'
+	*/
+	@media (768px <= width < 1012px) {
+		.notification-sort-by,
+		.notification-group-by {
+			&:has(~ .notification-recent-alerts a) {
+				display: none !important;
+			}
+		}
+	}
+}

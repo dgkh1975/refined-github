@@ -1,64 +1,120 @@
+// eslint-disable-next-line import-x/no-unassigned-import -- Side effects
 import 'webext-dynamic-content-scripts';
-import cache from 'webext-storage-cache'; // Also needed to regularly clear the cache
-import addDomainPermissionToggle from 'webext-domain-permission-toggle';
+// eslint-disable-next-line import-x/no-unassigned-import -- Side effects
+import 'webext-bugs/options-menu-item';
+import {customizeNoAllUrlsErrorMessage} from 'webext-bugs/no-all-urls';
+import {handleMessages} from 'webext-msg';
+import addPermissionToggle, {hasRequiredPermissions} from 'webext-permission-toggle';
+import {StorageItem} from 'webext-storage';
+import {globalCache} from 'webext-storage-cache'; // Also needed to regularly clear the cache
 
-import './options-storage';
-import {getRghIssueUrl} from './helpers/rgh-issue-link';
+import {hasAnyTokens} from './github-helpers/github-token.js';
+import {doesBrowserActionOpenOptions} from './helpers/feature-utils.js';
+import {styleHotfixes} from './helpers/hotfix.js';
+import isDevelopmentVersion from './helpers/is-development-version.js';
+import {fetchText} from './helpers/isomorphic-fetch.js';
+import safeCreateTab from './helpers/safe-create-tab.js';
+import optionsStorage from './options-storage.js';
+import addIdentifyFeatureContextMenu from './options/identify-feature.js';
+import addReloadWithoutContentScripts from './options/reload-without.js';
+
+const {version} = chrome.runtime.getManifest();
+
+const welcomeShown = new StorageItem('welcomed', {defaultValue: false});
 
 // GHE support
-addDomainPermissionToggle();
+if (hasRequiredPermissions()) {
+	addPermissionToggle();
+}
 
-const messageHandlers = {
-	openUrls(urls: string[], {tab}: browser.runtime.MessageSender) {
-		for (const [i, url] of urls.entries()) {
-			void browser.tabs.create({
+// Add "Reload without content scripts" functionality
+addReloadWithoutContentScripts();
+addIdentifyFeatureContextMenu();
+
+// Extend the error message for the "No All URLs" bugfix
+customizeNoAllUrlsErrorMessage(
+	'Refined GitHub is not meant to run on every website. If you’re looking to enable it on GitHub Enterprise, follow the instructions in the Options page.',
+);
+
+handleMessages({
+	async ping(): Promise<string> {
+		return 'pong';
+	},
+	async openUrls(urls: string[], {tab}: chrome.runtime.MessageSender) {
+		for (const url of urls) {
+			void safeCreateTab({
 				url,
-				index: tab!.index + i + 1,
+				openerTabId: tab!.id,
 				active: false,
 			});
 		}
 	},
-	closeTab(_: any, {tab}: browser.runtime.MessageSender) {
-		void browser.tabs.remove(tab!.id!);
+	async closeTab(_: any, {tab}: chrome.runtime.MessageSender) {
+		void chrome.tabs.remove(tab!.id!);
 	},
-	async fetch(url: string) {
-		const response = await fetch(url);
-		return response.text();
-	},
-	async fetchJSON(url: string) {
+	fetchText,
+	async fetchJson(url: string) {
 		const response = await fetch(url);
 		return response.json();
 	},
-};
-
-browser.runtime.onMessage.addListener((message: typeof messageHandlers, sender) => {
-	for (const id of Object.keys(message) as Array<keyof typeof messageHandlers>) {
-		if (id in messageHandlers) {
-			return messageHandlers[id](message[id], sender);
-		}
-	}
+	async openOptionsPage(hash: string) {
+		return safeCreateTab({
+			url: chrome.runtime.getURL(`assets/options.html${hash && `#${hash}`}`),
+		});
+	},
+	async getStyleHotfixes() {
+		return styleHotfixes.get(version);
+	},
 });
 
-// Give the browserAction a reason to exist other than "Enable RGH on this domain"
-browser.browserAction.onClicked.addListener(() => {
-	void browser.tabs.create({
-		url: 'https://github.com',
+chrome.action.onClicked.addListener(async tab => {
+	if (doesBrowserActionOpenOptions) {
+		void chrome.runtime.openOptionsPage();
+		return;
+	}
+
+	const {actionUrl} = await optionsStorage.getAll();
+	if (!actionUrl) {
+		// Default to options page if unset
+		void chrome.runtime.openOptionsPage();
+		return;
+	}
+
+	await safeCreateTab({
+		openerTabId: tab.id,
+		url: actionUrl,
 	});
 });
 
-browser.runtime.onInstalled.addListener(async ({reason}) => {
-	// Only notify on install
-	if (reason === 'install') {
-		const {installType} = await browser.management.getSelf();
-		if (installType === 'development') {
+async function showWelcomePage(): Promise<void> {
+	if (await welcomeShown.get()) {
+		return;
+	}
+
+	const [hasStoredToken, hasPermissions] = await Promise.all([
+		hasAnyTokens(), // We can't handle an invalid token on a "Welcome" page, so just check whether the user has ever set one
+		chrome.permissions.contains({origins: ['https://github.com/*']}),
+	]);
+
+	try {
+		if (hasStoredToken && hasPermissions) {
+			// Mark as welcomed
 			return;
 		}
 
-		await browser.tabs.create({
-			url: getRghIssueUrl(3543),
-		});
+		const url = chrome.runtime.getURL('assets/welcome.html');
+		await safeCreateTab({url});
+	} finally {
+		// Make sure it's always set to true even in case of errors
+		await welcomeShown.set(true);
+	}
+}
+
+chrome.runtime.onInstalled.addListener(async () => {
+	if (isDevelopmentVersion()) {
+		await globalCache.clear();
 	}
 
-	// Hope that the feature was fixed in this version
-	await cache.delete('hotfix');
+	// Call after the reset above just in case we nuked Safari's base permissions
+	await showWelcomePage();
 });

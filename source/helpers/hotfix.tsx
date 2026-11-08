@@ -1,0 +1,91 @@
+import {any as concatenateTemplateLiteralTag} from 'code-tag';
+import React from 'dom-chef';
+import {isEnterprise} from 'github-url-detection';
+import {CachedFunction} from 'webext-storage-cache';
+
+import {getNewFeatureName} from '../feature-data.js';
+import type {RghOptions} from '../options-storage.js';
+import {type BrokenFeatureEntry, parseBrokenFeaturesCsv} from './hotfix-parse.js';
+import isDevelopmentVersion from './is-development-version.js';
+import {webextFetch} from './isomorphic-fetch.js';
+
+const {version: currentVersion} = chrome.runtime.getManifest();
+
+async function fetchHotfix(path: string): Promise<string> {
+	// Use GitHub Pages host because the API is rate-limited
+	return webextFetch(`https://refined-github.github.io/yolo/${path}`, {
+		cache: 'no-store', // Disable caching altogether
+	});
+}
+
+type HotfixStorage = BrokenFeatureEntry[];
+
+export const brokenFeatures = new CachedFunction('broken-features', {
+	async updater(): Promise<HotfixStorage> {
+		// To facilitate debugging, ignore hotfixes during development.
+		// Change the version in manifest.json to test hotfixes
+		if (isDevelopmentVersion()) {
+			return [];
+		}
+
+		const content = await fetchHotfix('broken-features.csv');
+		return parseBrokenFeaturesCsv(content, currentVersion);
+	},
+	maxAge: {hours: 6},
+	staleWhileRevalidate: {days: 30},
+});
+
+export const styleHotfixes = new CachedFunction('style-hotfixes', {
+	// To facilitate debugging, ignore hotfixes during development.
+	// Change the version in manifest.json to test hotfixes
+	updater: async (version: string): Promise<string> => isDevelopmentVersion() ? '' : fetchHotfix(`style/${version}.css`),
+
+	maxAge: {hours: 6},
+	staleWhileRevalidate: {days: 300},
+	cacheKey: () => '',
+});
+
+export function brokenFeaturesAsOptions(brokenFeaturesStorage: HotfixStorage = []): Partial<RghOptions> {
+	const options: Partial<RghOptions> = {};
+	for (const [feature] of brokenFeaturesStorage) {
+		const currentFeature = getNewFeatureName(feature);
+		if (currentFeature) {
+			options[`feature:${currentFeature}`] = false;
+		}
+	}
+
+	return options;
+}
+
+export async function applyStyleHotfixes(style: string): Promise<void> {
+	if (!style || isEnterprise()) {
+		return;
+	}
+
+	// Prepend to body because that's the only way to guarantee they come after the static file
+	document.body.prepend(<style>{style}</style>);
+}
+
+let localStrings: Record<string, string> = {};
+export function _(...arguments_: Parameters<typeof concatenateTemplateLiteralTag>): string {
+	const original = concatenateTemplateLiteralTag(...arguments_);
+	return localStrings[original] ?? original;
+}
+
+const localStringsHotfix = new CachedFunction('strings-hotfixes', {
+	async updater(): Promise<Record<string, string>> {
+		const json = await fetchHotfix('strings.json');
+		return json ? JSON.parse(json) : {};
+	},
+	maxAge: {hours: 6},
+	staleWhileRevalidate: {days: 30},
+});
+
+// Updates the local object from the storage to enable synchronous access
+export async function preloadSyncLocalStrings(): Promise<void> {
+	if (isDevelopmentVersion() || isEnterprise()) {
+		return;
+	}
+
+	localStrings = await localStringsHotfix.get() ?? {};
+}

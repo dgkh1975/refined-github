@@ -1,113 +1,118 @@
+import './show-associated-branch-prs-on-fork.css';
+
+import cx from 'clsx';
 import React from 'dom-chef';
-import cache from 'webext-storage-cache';
-import onetime from 'onetime';
-import {observe} from 'selector-observer';
 import * as pageDetect from 'github-url-detection';
-import {GitMergeIcon, GitPullRequestIcon, GitPullRequestClosedIcon, GitPullRequestDraftIcon} from '@primer/octicons-react';
+import memoize from 'memoize';
+import GitMergeIcon from 'octicons-plain-react/GitMerge';
+import GitPullRequestIcon from 'octicons-plain-react/GitPullRequest';
+import GitPullRequestClosedIcon from 'octicons-plain-react/GitPullRequestClosed';
+import GitPullRequestDraftIcon from 'octicons-plain-react/GitPullRequestDraft';
+import RepoForkedIcon from 'octicons-plain-react/RepoForked';
+import {closestElement} from 'select-dom';
+import {CachedFunction} from 'webext-storage-cache';
 
-import features from '.';
-import * as api from '../github-helpers/api';
-import {getRepo, upperCaseFirst} from '../github-helpers';
+import features from '../feature-manager.js';
+import api from '../github-helpers/api.js';
+import {cacheByRepo} from '../github-helpers/index.js';
+import observe from '../helpers/selector-observer.js';
+import AssociatedPullRequests from './show-associated-branch-prs-on-fork.gql';
 
-interface PullRequest {
-	timelineItems: {
-		nodes: AnyObject;
-	};
+type PullRequest = {
 	number: number;
 	state: keyof typeof stateIcon;
 	isDraft: boolean;
 	url: string;
-}
+};
 
-export const getPullRequestsAssociatedWithBranch = cache.function(async (): Promise<Record<string, PullRequest>> => {
-	const {repository} = await api.v4(`
-		repository() {
-			refs(refPrefix: "refs/heads/", last: 100) {
-				nodes {
-					name
-					associatedPullRequests(last: 1, orderBy: {field: CREATED_AT, direction: DESC}) {
-						nodes {
-							number
-							state
-							isDraft
-							url
-							timelineItems(last: 1, itemTypes: [HEAD_REF_DELETED_EVENT, HEAD_REF_RESTORED_EVENT]) {
-								nodes {
-									__typename
-								}
-							}
-						}
-					}
-				}
+export const pullRequestsAssociatedWithBranch = new CachedFunction('associatedBranchPullRequests', {
+	async updater(): Promise<Record<string, PullRequest>> {
+		const {repository} = await api.v4(AssociatedPullRequests);
+
+		const pullRequests: Record<string, PullRequest> = {};
+		for (const {name, associatedPullRequests} of repository.refs.nodes) {
+			const [prInfo] = associatedPullRequests.nodes;
+			// Check if the ref was deleted, since the result includes pr's that are not in fact related to this branch but rather to the branch name.
+			const wasHeadRefDeleted = prInfo?.timelineItems.nodes[0]?.__typename === 'HeadRefDeletedEvent';
+			if (prInfo && !wasHeadRefDeleted) {
+				pullRequests[name] = {
+					number: prInfo.number,
+					state: prInfo.isDraft && prInfo.state === 'OPEN' ? 'DRAFT' : prInfo.state,
+					isDraft: prInfo.isDraft,
+					url: prInfo.url,
+				};
 			}
 		}
-	`);
 
-	const pullRequests: Record<string, PullRequest> = {};
-	for (const {name, associatedPullRequests} of repository.refs.nodes) {
-		const [prInfo] = associatedPullRequests.nodes as PullRequest[];
-		// Check if the ref was deleted, since the result includes pr's that are not in fact related to this branch but rather to the branch name.
-		const headRefWasDeleted = prInfo?.timelineItems.nodes[0]?.__typename === 'HeadRefDeletedEvent';
-		if (prInfo && !headRefWasDeleted) {
-			prInfo.state = prInfo.isDraft && prInfo.state === 'OPEN' ? 'DRAFT' : prInfo.state;
-			pullRequests[name] = prInfo;
-		}
-	}
-
-	return pullRequests;
-}, {
+		return pullRequests;
+	},
 	maxAge: {hours: 1},
 	staleWhileRevalidate: {days: 4},
-	cacheKey: () => 'associatedBranchPullRequests:' + getRepo()!.nameWithOwner,
+	cacheKey: cacheByRepo,
 });
 
 export const stateIcon = {
+	/* eslint-disable @typescript-eslint/naming-convention -- The same case as in the API response */
 	OPEN: GitPullRequestIcon,
 	CLOSED: GitPullRequestClosedIcon,
 	MERGED: GitMergeIcon,
 	DRAFT: GitPullRequestDraftIcon,
+	/* eslint-enable @typescript-eslint/naming-convention */
 };
 
-async function init(): Promise<void> {
-	const associatedPullRequests = await getPullRequestsAssociatedWithBranch();
+async function addLink(branch: HTMLElement): Promise<void> {
+	const prs = await pullRequestsAssociatedWithBranch.get();
+	const branchName = branch.getAttribute('title')!;
+	const prInfo = prs[branchName];
+	if (!prInfo) {
+		return;
+	}
 
-	observe('.test-compare-link', {
-		add(branchCompareLink) {
-			const branchName = branchCompareLink.closest('[branch]')!.getAttribute('branch')!;
-			const prInfo = associatedPullRequests[branchName];
-			if (prInfo) {
-				const StateIcon = stateIcon[prInfo.state];
-				const state = upperCaseFirst(prInfo.state);
+	const StateIcon = stateIcon[prInfo.state] ?? (() => {/* empty */});
+	const stateClassName = prInfo.state.toLowerCase();
 
-				branchCompareLink.replaceWith(
-					<div className="d-inline-block text-right ml-3">
-						<a
-							data-issue-and-pr-hovercards-enabled
-							href={prInfo.url}
-							data-hovercard-type="pull_request"
-							data-hovercard-url={prInfo.url + '/hovercard'}
-						>
-							#{prInfo.number}
-						</a>
-						{' '}
-						<span
-							className={`State State--${prInfo.state.toLowerCase()} State--small ml-1`}
-						>
-							<StateIcon width={14} height={14}/> {state}
-						</span>
-					</div>);
-			}
-		},
-	});
+	const cell = closestElement('tr.TableRow', branch)
+		.children
+		.item(4)!;
+
+	cell.classList.add('rgh-pr-cell');
+	cell.append(
+		<div className="rgh-pr-box">
+			<a
+				href={prInfo.url}
+				data-hovercard-url={prInfo.url + '/hovercard'}
+				aria-label={`Link to the ${prInfo.isDraft ? 'draft ' : ''}pull request #${prInfo.number}`}
+				className="rgh-pr-link"
+			>
+				<StateIcon width={14} height={14} className={stateClassName} />
+				<RepoForkedIcon width={14} height={14} className={cx('mr-1 tmp-mr-1', stateClassName)} />
+				#{prInfo.number}
+			</a>
+		</div>,
+	);
 }
 
-void features.add(__filebasename, {
+async function init(signal: AbortSignal): Promise<void> {
+	// Memoize because it's being called twice for each. Ideally this should be part of the selector observer
+	// https://github.com/refined-github/refined-github/pull/7194#issuecomment-1894972091
+	observe('react-app[app-name=repos-branches] a[class*=BranchName] div[title]', memoize(addLink), {signal});
+}
+
+void features.add(import.meta.url, {
 	asLongAs: [
 		pageDetect.isForkedRepo,
 	],
 	include: [
 		pageDetect.isBranches,
 	],
-	awaitDomReady: false,
-	init: onetime(init),
+	requiresToken: true,
+	init,
 });
+
+/*
+
+Test URLs:
+
+https://github.com/bfred-it-org/github-sandbox/branches
+
+*/

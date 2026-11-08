@@ -1,32 +1,49 @@
-import select from 'select-dom';
-import delegate from 'delegate-it';
+import type {DelegateEvent} from 'delegate-it';
 import * as pageDetect from 'github-url-detection';
+import {$} from 'select-dom';
 
-import features from '.';
-import {onConversationTitleFieldKeydown} from '../github-events/on-field-keydown';
+import features from '../feature-manager.js';
+import {onConversationTitleFieldKeydown} from '../github-events/on-field-keydown.js';
+import {assertNodeContent} from '../helpers/dom-utils.js';
 
-function handleEscPress(event: delegate.Event<KeyboardEvent>): void {
-	if (event.key === 'Escape') {
-		select('.js-cancel-issue-edit')!.click();
-
-		event.stopImmediatePropagation();
-		event.preventDefault();
+function handleEscPress(event: DelegateEvent<KeyboardEvent>): void {
+	if ((event.key !== 'Escape') || !(event.delegateTarget instanceof HTMLInputElement)) {
+		return;
 	}
+
+	const cancelButton = $([
+		'div[class^="prc-PageLayout-HeaderContent"] > form button[data-variant="invisible"]',
+		// TODO [2027-01-01]: Remove after legacy PR files view is removed
+		'.js-cancel-issue-edit',
+	]);
+	assertNodeContent(cancelButton, 'Cancel');
+
+	cancelButton.click();
+	event.stopImmediatePropagation();
+	event.preventDefault();
 }
 
-function init(): void {
-	onConversationTitleFieldKeydown(handleEscPress);
+function init(signal: AbortSignal): void {
+	onConversationTitleFieldKeydown(handleEscPress, signal);
 }
 
-void features.add(__filebasename, {
+void features.add(import.meta.url, {
 	shortcuts: {
 		esc: 'Cancel editing a conversation title',
 	},
 	include: [
-		pageDetect.isIssue,
 		pageDetect.isPR,
 	],
-	awaitDomReady: false,
-	deduplicate: 'has-rgh-inner',
 	init,
 });
+
+/*
+
+Test URLs:
+
+1. Visit https://github.com/pulls
+2. Open any PR
+3. Try to edit the title
+4. Press Esc
+
+*/

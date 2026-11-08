@@ -1,57 +1,60 @@
-import cache from 'webext-storage-cache';
-import select from 'select-dom';
-import * as pageDetect from 'github-url-detection';
+import elementReady from 'element-ready';
+import type {NameWithOwner} from 'github-url-detection';
+import {CachedFunction} from 'webext-storage-cache';
 
-import * as api from './api';
-import {getRepo} from '.';
+import api from './api.js';
+import GetDefaultBranch from './get-default-branch.gql';
+import {extractCurrentBranchFromBranchPicker, getRepo} from './index.js';
+import {branchSelector} from './selectors.js';
 
-// This regex should match all of these combinations:
-// "This branch is even with master."
-// "This branch is 1 commit behind master."
-// "This branch is 1 commit ahead of master."
-// "This branch is 1 commit ahead, 27 commits behind master."
-const branchInfoRegex = /([^ ]+)\.$/;
+const isCurrentRepo = (nameWithOwner: NameWithOwner): boolean => getRepo()?.nameWithOwner === nameWithOwner;
 
-const getDefaultBranch = cache.function(async function (repository?: pageDetect.RepositoryInfo): Promise<string> {
-	if (arguments.length === 0) {
-		repository = getRepo();
+// Do not make this function complicated. We're only optimizing for the repo root.
+async function fromDom(): Promise<string | undefined> {
+	if (!['', 'commits'].includes(getRepo()!.path)) {
+		return;
 	}
 
-	if (!repository) {
-		throw new Error('getDefaultBranch was called on a non-repository page');
+	// We're on the default branch, so we can extract it from the current page. This exclusively happens on the exact pages:
+	// /user/repo
+	// /user/repo/commits (without further path)
+	const element = await elementReady(branchSelector);
+
+	if (!element) {
+		return;
 	}
 
-	if (arguments.length === 0 || JSON.stringify(repository) === JSON.stringify(getRepo())) {
-		if (pageDetect.isRepoHome()) {
-			const currentBranch = select('#branch-select-menu [data-menu-button]');
-			if (currentBranch) { // If missing, it'll default to the API call
-				return currentBranch.textContent!;
-			}
-		}
+	return extractCurrentBranchFromBranchPicker(element);
+}
 
-		if (!pageDetect.isForkedRepo()) {
-			// We can find the name in the infobar, available in folder views
-			const branchInfo = select('.branch-infobar')?.textContent!.trim();
-			const defaultBranch = branchInfoRegex.exec(branchInfo!)?.[1];
-			if (defaultBranch) {
-				return defaultBranch;
-			}
-		}
-	}
-
-	const response = await api.v4(`
-		repository(owner: "${repository.owner}", name: "${repository.name}") {
-			defaultBranchRef {
-				name
-			}
-		}
-	`);
+async function fromApi(repository: NameWithOwner): Promise<string> {
+	const [owner, name] = repository.split('/', 2);
+	const response = await api.v4(GetDefaultBranch, {
+		variables: {
+			owner,
+			name,
+		},
+	});
 
 	return response.repository.defaultBranchRef.name;
-}, {
+}
+
+export const defaultBranchOfRepo = new CachedFunction('default-branch', {
+	// DO NOT use optional arguments/defaults in "cached functions" because they can't be memoized effectively
+	// https://github.com/sindresorhus/eslint-plugin-unicorn/issues/1864
+	async updater(repository: NameWithOwner): Promise<string> {
+		if (!repository) {
+			throw new Error('getDefaultBranch was called on a non-repository page');
+		}
+
+		// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Wrong, type can be `false`
+		return (isCurrentRepo(repository) && await fromDom()) || fromApi(repository);
+	},
+
 	maxAge: {hours: 1},
 	staleWhileRevalidate: {days: 20},
-	cacheKey: ([repository = getRepo()]) => `default-branch:${repository!.nameWithOwner}`,
 });
 
-export default getDefaultBranch;
+export default async function getDefaultBranch(): Promise<string> {
+	return defaultBranchOfRepo.get(getRepo()!.nameWithOwner);
+}

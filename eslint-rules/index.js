@@ -1,0 +1,21 @@
+import avoidBacklinks from './avoid-backlinks.js';
+import consistentFeatureAdd from './consistent-feature-add.js';
+import cssDocumentation from './css-documentation.js';
+import noUselessFunction from './css-no-useless-function.js';
+import requireFuchsiaFallback from './css-require-fuchsia-fallback.js';
+import sortCompoundSelector from './css-sort-compound-selector.js';
+import noOptionalChaining from './no-optional-chaining.js';
+
+const refinedGithubPlugin = {
+	rules: {
+		'no-optional-chaining': noOptionalChaining,
+		'consistent-feature-add': consistentFeatureAdd,
+		'css-documentation': cssDocumentation,
+		'css-require-fuchsia-fallback': requireFuchsiaFallback,
+		'css-sort-compound-selector': sortCompoundSelector,
+		'css-no-useless-function': noUselessFunction,
+		'avoid-backlinks': avoidBacklinks,
+	},
+};
+
+export default refinedGithubPlugin;

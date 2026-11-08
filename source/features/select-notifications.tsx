@@ -1,187 +1,95 @@
-import './select-notifications.css';
-import React from 'dom-chef';
-import select from 'select-dom';
-import onetime from 'onetime';
-import delegate from 'delegate-it';
-import {observe} from 'selector-observer';
 import * as pageDetect from 'github-url-detection';
-import {
-	CheckCircleIcon,
-	CheckIcon,
-	DotFillIcon,
-	DotIcon,
-	GitMergeIcon,
-	GitPullRequestDraftIcon,
-	GitPullRequestIcon,
-	IssueOpenedIcon,
-	XCircleIcon,
-} from '@primer/octicons-react';
+import {$, $$, closestElement, elementExists} from 'select-dom';
+import {mount} from 'svelte';
 
-import features from '.';
+import features from '../feature-manager.js';
+import {botLinksNotificationSelectors} from '../github-helpers/selectors.js';
+import {is, not} from '../helpers/css-selectors.js';
+import observe from '../helpers/selector-observer.js';
+import SelectNotifications from './select-notifications.svelte';
 
+const prIcons = [
+	'.octicon-git-pull-request',
+	'.octicon-git-pull-request-closed',
+	'.octicon-git-pull-request-draft',
+	'.octicon-git-merge',
+] as const;
+export const issueIcons = [
+	'.octicon-issue-opened',
+	'.octicon-issue-closed',
+	'.octicon-skip',
+] as const;
 const filters = {
-	'Pull requests': ':is(.octicon-git-pull-request, .octicon-git-pull-request-closed, .octicon-git-pull-request-draft, .octicon-git-merge)',
-	Issues: ':is(.octicon-issue-opened, .octicon-issue-closed)',
+	'Pull requests': is(prIcons),
+	Issues: is(issueIcons),
+	// This selector is a bit too loose, so it needs to be scoped to the smallest possible element and exclude the bookmark icon
+	Others: '.notification-list-item-link .octicon' + not(...prIcons, ...issueIcons, '.octicon-bookmark'),
+	Bots: is(botLinksNotificationSelectors),
 	Open: ':is(.octicon-issue-opened, .octicon-git-pull-request)',
-	Closed: ':is(.octicon-issue-closed, .octicon-git-pull-request-closed)',
+	Closed: ':is(.octicon-issue-closed, .octicon-git-pull-request-closed, .octicon-skip)',
 	Draft: '.octicon-git-pull-request-draft',
 	Merged: '.octicon-git-merge',
-	Read: '.notification-read',
-	Unread: '.notification-unread',
+	Read: '.notification-read *',
+	Unread: '.notification-unread *',
+} as const;
+
+export type Filter = keyof typeof filters;
+export type Category = 'Type' | 'Status' | 'Read';
+export type Selection = Record<Category, Filter[]>;
+
+const categories: Record<Category, Filter[]> = {
+	Type: ['Pull requests', 'Issues', 'Others', 'Bots'],
+	Status: ['Open', 'Closed', 'Merged', 'Draft'],
+	Read: ['Read', 'Unread'],
 };
 
-type Filter = keyof typeof filters;
-type Category = 'Type' | 'Status' | 'Read';
+function selectMatching(selection: Selection): void {
+	const selectorGroups = Object.values(selection)
+		.map(names => names.map(name => filters[name]))
+		.filter(selectors => selectors.length > 0);
+	const shouldDeselectAll = selectorGroups.length === 0;
 
-function resetFilters({target}: Event): void {
-	select('form#rgh-select-notifications-form')!.reset();
-	for (const label of select.all('label', target as Element)) {
-		label.setAttribute('aria-checked', 'false');
-	}
-}
-
-function getFiltersSelector(formData: FormData, category: Category): string {
-	return formData.getAll(category).map(value => filters[value as Filter]).join(',');
-}
-
-function handleSelection({target}: Event): void {
-	const selectAllCheckbox = select('input[type="checkbox"].js-notifications-mark-all-prompt')!;
-	// Reset the "Select all" checkbox
-	if (selectAllCheckbox.checked) {
-		selectAllCheckbox.click();
+	let input: HTMLInputElement | undefined;
+	for (const notification of $$('.notifications-list-item')) {
+		input = $('input.js-notification-bulk-action-check-item', notification);
+		// Updating the "checked" property does not raise any events
+		input.checked = !shouldDeselectAll && selectorGroups.every(selectors => elementExists(selectors, notification));
 	}
 
-	if (select.exists(':checked', target as Element)) {
-		const formData = new FormData(select('form#rgh-select-notifications-form'));
-		const types = getFiltersSelector(formData, 'Type');
-		const statuses = getFiltersSelector(formData, 'Status');
-		const readStatus = getFiltersSelector(formData, 'Read');
-
-		for (const notification of select.all('.notifications-list-item')) {
-			if (
-				(types && !select.exists(types, notification))
-				|| (statuses && !select.exists(statuses, notification))
-				|| (readStatus && !notification.matches(readStatus))
-			) {
-				// Make excluded notifications unselectable
-				select('.js-notification-bulk-action-check-item', notification)!.removeAttribute('data-check-all-item');
-			}
-		}
-
-		// If at least one notification is selectable, trigger the "Select all" checkbox
-		if (select.exists('.js-notification-bulk-action-check-item[data-check-all-item]')) {
-			selectAllCheckbox.click();
-		}
-	}
-
-	// Make all notifications selectable again
-	for (const disabledNotificationCheckbox of select.all('.js-notification-bulk-action-check-item:not([data-check-all-item])')) {
-		// eslint-disable-next-line unicorn/prefer-dom-node-dataset -- For consistency with the `removeAttribute()` above
-		disabledNotificationCheckbox.setAttribute('data-check-all-item', '');
-	}
+	// Trigger the selection action bar update
+	input?.dispatchEvent(new Event('change', {bubbles: true}));
 }
 
-function createDropdownList(category: Category, filters: Filter[]): JSX.Element {
-	const icons: {[Key in Filter]: JSX.Element} = {
-		'Pull requests': <GitPullRequestIcon className="color-text-secondary"/>,
-		Issues: <IssueOpenedIcon className="color-text-secondary"/>,
-		Open: <CheckCircleIcon className="color-text-success"/>,
-		Closed: <XCircleIcon className="color-text-danger"/>,
-		Draft: <GitPullRequestDraftIcon className="color-text-tertiary"/>,
-		Merged: <GitMergeIcon className="color-fg-done"/>,
-		Read: <DotIcon className="color-text-link"/>,
-		Unread: <DotFillIcon className="color-text-link"/>,
-	};
+function addDropdown(selectAllCheckbox: HTMLInputElement): void {
+	const anchor = closestElement('label', selectAllCheckbox);
 
-	return (
-		<div className="SelectMenu-list">
-			<header className="SelectMenu-header">
-				<span className="SelectMenu-title">{category}</span>
-			</header>
-			{filters.map(filter => (
-				<label
-					className="SelectMenu-item text-normal"
-					role="menuitemcheckbox"
-					aria-checked="false"
-					tabIndex={0}
-				>
-					<CheckIcon className="octicon octicon-check SelectMenu-icon SelectMenu-icon--check mr-2" aria-hidden="true"/>
-					<div className="SelectMenu-item-text">
-						<input
-							hidden
-							type="checkbox"
-							name={category}
-							value={filter}
-						/>
-						{icons[filter]}
-						<span className="ml-2">{filter}</span>
-					</div>
-				</label>
-			))}
-		</div>
-	);
-}
-
-const createDropdown = onetime(() => (
-	<details
-		className="details-reset details-overlay position-relative rgh-select-notifications"
-		on-toggle={resetFilters}
-	>
-		<summary
-			className="btn btn-sm ml-3 mr-1"
-			data-hotkey="S"
-			aria-haspopup="menu"
-			role="button"
-		>
-			Select by <span className="dropdown-caret ml-1"/>
-		</summary>
-		<details-menu
-			className="SelectMenu left-0"
-			aria-label="Select by"
-			role="menu"
-			on-details-menu-selected={handleSelection}
-		>
-			<div className="SelectMenu-modal">
-				<form id="rgh-select-notifications-form">
-					{createDropdownList('Type', ['Pull requests', 'Issues'])}
-					{createDropdownList('Status', ['Open', 'Closed', 'Merged', 'Draft'])}
-					{createDropdownList('Read', ['Read', 'Unread'])}
-				</form>
-			</div>
-		</details-menu>
-	</details>
-));
-
-function closeDropdown(): void {
-	select('.rgh-select-notifications')?.removeAttribute('open');
-}
-
-const deinit: VoidFunction[] = [];
-function init(): void {
-	const selectObserver = observe('.js-notifications-mark-all-prompt:not(.rgh-select-notifications-added)', {
-		add(selectAllCheckbox) {
-			selectAllCheckbox.classList.add('rgh-select-notifications-added');
-			selectAllCheckbox
-				.closest('label')!
-				.after(createDropdown());
-		},
+	mount(SelectNotifications, {
+		target: anchor.parentElement!,
+		anchor: anchor.nextElementSibling!,
+		props: {categories, onSelectionChange: selectMatching},
 	});
-	deinit.push(selectObserver.abort);
-
-	// Close the dropdown when one of the toolbar buttons is clicked
-	delegate(document, '.js-notifications-mark-selected-actions > *', 'click', closeDropdown);
 }
 
-void features.add(__filebasename, {
+function init(signal: AbortSignal): void {
+	observe('input.js-notifications-mark-all-prompt', addDropdown, {signal});
+}
+
+void features.add(import.meta.url, {
 	shortcuts: {
-		S: 'Open the "Select by" dropdown',
+		'shift s': 'Open the "Select by" dropdown',
 	},
 	include: [
 		pageDetect.isNotifications,
 	],
-	exclude: [
-		() => select.exists('img[src$="notifications/inbox-zero.svg"]'), // Notifications page may be empty
-	],
 	init,
-	deinit,
 });
+
+/*
+
+Test URLs:
+
+https://github.com/notifications (Grouped by date)
+https://github.com/notifications (Grouped by repo)
+https://github.com/notifications?query=reason%3Acomment (which is an unsaved filter)
+
+*/

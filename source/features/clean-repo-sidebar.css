@@ -1,15 +1,29 @@
-/* Hide "About" header */
-.rgh-clean-repo-sidebar .BorderGrid-row:first-of-type h2 {
-	display: none;
-}
+[rgh-clean-repo-sidebar] [class*='PageLayout-Pane'] {
+	/* Hide "About" header unless it contains repository edit controls #10027 */
+	[class*='sidebarSection']:first-child
+		> h2:not(:has([aria-label='Edit repository metadata'])) {
+		display: none;
 
-/* Hide "+n contributors" link */
-.rgh-clean-repo-sidebar ul.flex-wrap + .mt-3 {
-	display: none;
-}
+		/* Align the top of the repo root sidebar with the main page content */
+		+ p {
+			margin-top: 0 !important;
+		}
+	}
 
-/* Align the top of the sidebar with the main page content */
-/* Avoid breaking the sidebar alignment in PR discussions #4642 */
-.rgh-clean-repo-sidebar div:not(#discussion_bucket) > .gutter-condensed > :last-child {
-	margin-top: -16px !important;
+	/*
+	 * Hide "+ 65 releases" link
+	 * Hide "Learn more about GitHub Sponsors" link
+	 * Hide "+ 123 contributors" link
+	 */
+	[class*='moreLink'] {
+		display: none;
+	}
+
+	/* Hide Code of conduct links */
+	[class*='sidebarSection'] {
+		[href$='/code-of-conduct.md' i],
+		[href$='/code_of_conduct.md' i] {
+			display: none;
+		}
+	}
 }

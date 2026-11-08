@@ -1,0 +1,84 @@
+import {$, $$optional} from 'select-dom';
+
+type PrReference = {
+	/** @example fregante/mem:main */
+	absolute: string;
+
+	/** @example "main" on same-repo PRs, "fregante:main" on cross-repo PRs  */
+	relative: string;
+
+	/** @example fregante */
+	owner: string;
+
+	/** @example memoize */
+	name: string;
+
+	/** @example main */
+	branch: string;
+
+	/** @example fregante:mem */
+	nameWithOwner: string;
+};
+
+const absoluteReferenceRegex = /^(?<nameWithOwner>(?<owner>[^/:]+)\/(?<name>[^:]+)):(?<branch>.+)$/;
+
+/**
+Extract branch info from the UI
+@param absolute - The full reference, e.g. `fregante/mem:main`
+@param relative - The references it appear to the user in the PR, e.g. "main" on same-repo PRs, "fregante:main" on cross-repo PRs
+@example parseReferenceRaw('fregante/mem:main', 'main')
+*/
+export function parseReferenceRaw(absolute: string, relative: string): PrReference {
+	const absoluteMatch = absoluteReferenceRegex.exec(absolute);
+	if (!absoluteMatch) {
+		throw new TypeError(`Expected \`absolute\` to be "user/repo:branch", got "${absolute}"`);
+	}
+
+	const {owner, name, nameWithOwner, branch} = absoluteMatch.groups!;
+
+	// We must receive the relative reference because it also tells whether it's a cross-repo PR
+	const expectedRelative = [branch, `${owner}:${branch}`];
+	if (!expectedRelative.includes(relative)) {
+		throw new TypeError(`Expected \`relative\` to be either "${expectedRelative.join('" or "')}", got "${relative}"`);
+	}
+
+	return {
+		owner,
+		name,
+		branch,
+		nameWithOwner,
+		absolute,
+		relative,
+	};
+}
+
+function parseReference(referenceElement: HTMLElement): PrReference {
+	const {textContent, nextElementSibling, title} = referenceElement;
+	// Legacy view: the sibling can be empty, but `title` contains the absolute reference
+	// eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing -- Empty string must fall back too
+	const absolute = nextElementSibling?.textContent.trim() || title;
+	return parseReferenceRaw(absolute, textContent.trim());
+}
+
+export function getBranches(): {base: PrReference; head: PrReference} {
+	return {
+		get base() {
+			return parseReference($([
+				'[class*="summaryContainer"] a[data-component="BranchName"]',
+				'[class*="PullRequestHeaderSummary"] a[class^="PullRequestBranchName"]', // TODO [2027-03-01]: Drop
+				'.base-ref', // TODO [2027-01-01]: Drop after legacy PR files view is removed
+			]));
+		},
+		get head() {
+			return parseReference(
+				// Doesn't exist in old views
+				$$optional([
+					'[class*="summaryContainer"] a[data-component="BranchName"]',
+					'[class*="PullRequestHeaderSummary"] a[class^="PullRequestBranchName"]', // TODO [2027-03-01]: Drop
+				])?.[1]
+					// TODO [2027-01-01]: Drop after legacy PR files view is removed
+					?? $('.head-ref'),
+			);
+		},
+	};
+}

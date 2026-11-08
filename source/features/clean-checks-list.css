@@ -1,0 +1,49 @@
+/* Bringing running checks and failed checks to the top of the list */
+/* .octicon-check targets "successful" checks */
+/* .octicon-x targets "failed" checks */
+/* .octicon-skip targets "skipped" checks */
+/* .octicon-square-fill targets "neutral" checks */
+/* .text-italic targets "running" or "waiting" checks */
+
+/* Required to allow sorting */
+/* "updatable" class needed to target checks list only #6468 */
+.merge-status-list.js-updatable-content-preserve-scroll-position {
+	display: flex;
+	flex-direction: column;
+}
+
+/* Push running checks below failed checks */
+.merge-status-item:has(.text-italic) {
+	order: 1;
+}
+
+/* Push successful/skipped/neutral checks below running checks */
+.merge-status-item:has(.octicon-check, .octicon-skip, .octicon-square-fill) {
+	order: 2;
+
+	/* Dim them, only if any checks are failing or in progress */
+	.merge-status-list:has(.octicon-x, .text-italic):not(:hover) & {
+		opacity: 50%;
+	}
+}
+
+/* Untruncate long check descriptions: https://github.com/hashicorp/consul/commit/38d94282ca0a1ed66d21ebb5c966a97e450d0ae3 */
+.merge-status-item .css-truncate {
+	white-space: unset !important;
+}
+
+/* Top align check symbol */
+.merge-status-item .merge-status-icon {
+	align-self: flex-start !important;
+
+	svg {
+		height: 20px;
+	}
+}
+
+/*
+Test URLs
+https://github.com/refined-github/refined-github/pull/7166
+https://github.com/refined-github/refined-github/pull/7166/commits/0219fdddb5325383fed8c7300619b6445f0ae303
+https://github.com/refined-github/refined-github/commit/0219fdddb5325383fed8c7300619b6445f0ae303
+*/

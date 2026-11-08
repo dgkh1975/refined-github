@@ -1,83 +1,73 @@
 import './conflict-marker.css';
+
+import batchedFunction from 'batched-function';
 import React from 'dom-chef';
-import select from 'select-dom';
-import {AlertIcon} from '@primer/octicons-react';
-import oneMutation from 'one-mutation';
 import * as pageDetect from 'github-url-detection';
+import AlertIcon from 'octicons-plain-react/Alert';
 
-import features from '.';
-import * as api from '../github-helpers/api';
+import {withTooltipRef} from '../components/tooltip.js';
+import features from '../feature-manager.js';
+import api from '../github-helpers/api.js';
+import {commentBoxHashPr, openPrsListLink} from '../github-helpers/selectors.js';
+import observe from '../helpers/selector-observer.js';
 
-interface PRConfig {
-	number: string;
-	user: string;
-	repo: string;
-	link: HTMLAnchorElement;
-	key: string;
-}
+async function addIcon(links: HTMLAnchorElement[]): Promise<void> {
+	const prConfigs = links.map(link => {
+		const [, owner, name, , prNumber] = link.pathname.split('/', 5);
+		const key = api.escapeKey(owner, name, prNumber);
+		return {
+			key,
+			link,
+			owner,
+			name,
+			number: Number(prNumber),
+		};
+	});
 
-function createQueryFragment(pr: PRConfig): string {
-	return `
-		${pr.key}: repository(owner: "${pr.user}", name: "${pr.repo}") {
-			pullRequest(number: ${pr.number}) {
+	const batchQuery = prConfigs.map(({key, owner, name, number}) => `
+		${key}: repository(owner: "${owner}", name: "${name}") {
+			pullRequest(number: ${number}) {
 				mergeable
+				state
+				isDraft
 			}
 		}
-	`;
-}
+	`).join('\n');
 
-function buildQuery(prs: PRConfig[]): string {
-	return prs.map(pr => createQueryFragment(pr)).join('\n');
-}
+	const data = await api.v4(batchQuery);
 
-function getPRConfig(prIcon: Element): PRConfig {
-	const link = prIcon.closest('.js-navigation-item')!.querySelector('a.js-navigation-open')!;
-	const [, user, repo, , number] = link.pathname.split('/');
-	return {
-		user,
-		repo,
-		number,
-		link,
-		key: api.escapeKey(`${user}_${repo}_${number}`),
-	};
-}
-
-async function init(): Promise<false | void> {
-	// Milestone issues are lazy-loaded
-	if (pageDetect.isMilestone()) {
-		await oneMutation(select('.js-milestone-issues-container')!, {childList: true});
-	}
-
-	const openPrIcons = select.all('.js-issue-row .octicon-git-pull-request.open');
-	if (openPrIcons.length === 0) {
-		return false;
-	}
-
-	const prs = openPrIcons.map(icon => getPRConfig(icon));
-	const data = await api.v4(buildQuery(prs));
-
-	for (const pr of prs) {
-		if (data[pr.key].pullRequest.mergeable === 'CONFLICTING') {
+	for (const pr of prConfigs) {
+		const {mergeable, state, isDraft} = data[pr.key].pullRequest;
+		if (mergeable === 'CONFLICTING' && (state === 'OPEN' || isDraft)) {
 			pr.link.after(
 				<a
-					className="rgh-conflict-marker tooltipped tooltipped-e color-text-secondary ml-2"
-					aria-label="This PR has conflicts that must be resolved"
-					href={`${pr.link.pathname}#partial-pull-merging`}
+					ref={withTooltipRef({label: 'This PR has conflicts that must be resolved', direction: 'e'})}
+					className="rgh-conflict-marker color-fg-muted ml-2 tmp-ml-2"
+					href={pr.link.pathname + commentBoxHashPr}
 				>
-					<AlertIcon/>
+					<AlertIcon className="v-align-middle" />
 				</a>,
 			);
 		}
 	}
 }
 
-void features.add(__filebasename, {
+async function init(signal: AbortSignal): Promise<void> {
+	observe(openPrsListLink, batchedFunction(addIcon, {delay: 100}), {signal});
+}
+
+void features.add(import.meta.url, {
 	include: [
-		pageDetect.isConversationList,
+		pageDetect.isIssueOrPRList,
 	],
-	exclude: [
-		() => select.exists('.blankslate'),
-	],
-	deduplicate: 'has-rgh-inner',
+	requiresToken: true,
 	init,
 });
+
+/*
+Test URLs
+https://github.com/pulls
+https://github.com/refined-github/sandbox/pulls?q=is%3Apr+is%3Aopen+conflict
+https://github.com/refined-github/sandbox/issues?q=conflict
+https://github.com/kubernetes/kubernetes/milestone/62
+*/

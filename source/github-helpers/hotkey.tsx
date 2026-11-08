@@ -1,0 +1,40 @@
+import React from 'dom-chef';
+
+import {isMac} from './index.js';
+
+export function registerHotkey(
+	hotkey: string,
+	functionOrUrl: React.MouseEventHandler<HTMLButtonElement> | string,
+	{signal}: SignalAsOptions = {},
+): void {
+	const element = typeof functionOrUrl === 'string'
+		? <a hidden href={functionOrUrl} data-hotkey={hotkey} />
+		: <button hidden type="button" data-hotkey={hotkey} onClick={functionOrUrl} />;
+
+	document.body.prepend(element);
+
+	signal?.addEventListener('abort', () => {
+		element.remove();
+	});
+}
+
+export function overrideHotkey(button: HTMLAnchorElement | HTMLButtonElement | undefined, hotkey: string): void {
+	if (!button) {
+		return;
+	}
+
+	button.dataset.hotkey = hotkey;
+}
+
+/** Safely add a hotkey to an element, preserving any existing ones and avoiding duplicates */
+export function addHotkey(button: HTMLAnchorElement | HTMLButtonElement | undefined, hotkey: string): void {
+	if (!button) {
+		return;
+	}
+
+	const hotkeys = new Set(button.dataset.hotkey?.split(','));
+	hotkeys.add(hotkey);
+	overrideHotkey(button, [...hotkeys].join(','));
+}
+
+export const modifierKey = isMac ? 'cmd' : 'ctrl';

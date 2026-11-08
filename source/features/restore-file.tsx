@@ -1,141 +1,221 @@
+import delegate, {type DelegateEvent} from 'delegate-it';
 import React from 'dom-chef';
-import select from 'select-dom';
-import onetime from 'onetime';
-import pushForm from 'push-form';
-import delegate from 'delegate-it';
 import * as pageDetect from 'github-url-detection';
+import UndoIcon from 'octicons-plain-react/Undo';
+import {$, $optional, closestElement} from 'select-dom';
 
-import features from '.';
-import * as api from '../github-helpers/api';
-import fetchDom from '../helpers/fetch-dom';
-import showToast from '../github-helpers/toast';
-import {getConversationNumber} from '../github-helpers';
+import features from '../feature-manager.js';
+import api from '../github-helpers/api.js';
+import getPrInfo from '../github-helpers/get-pr-info.js';
+import {getBranches} from '../github-helpers/pr-branches.js';
+import showToast from '../github-helpers/toast.js';
+import observe from '../helpers/selector-observer.js';
 
-/**
-Get the current base commit of this PR. It should change after rebases and merges in this PR.
-This value is not consistently available on the page (appears in `/files` but not when only 1 commit is selected)
-*/
-const getBaseReference = onetime(async (): Promise<string> => {
-	const {repository} = await api.v4(`
-		repository() {
-			pullRequest(number: ${getConversationNumber()!}) {
-				baseRefOid
-			}
-		}
-	`);
-	return repository.pullRequest.baseRefOid;
-});
+// Track the currently focused file container for removal after discard
+let focusedFileContainer: HTMLElement | undefined;
 
-async function getFile(filePath: string): Promise<{isTruncated: boolean; text: string} | undefined> {
-	const {repository} = await api.v4(`
-		repository() {
-			file: object(expression: "${await getBaseReference()}:${filePath}") {
-				... on Blob {
-					isTruncated
-					text
+async function getMergeBaseReference(): Promise<string> {
+	const {base, head} = getBranches();
+	// This v3 response is relatively large, but it doesn't seem to be available on v4
+	// Cache buster due to: https://github.com/refined-github/refined-github/issues/7312
+	const response = await api.v3(`compare/${base.relative}...${head.relative}?cachebust=${Date.now()}`);
+	return response.merge_base_commit.sha; // #4679
+}
+
+async function getHeadReference(): Promise<string> {
+	const {base} = getBranches();
+	const {headRefOid} = await getPrInfo(base.relative);
+	return headRefOid;
+}
+
+async function getFile(filePath: string): Promise<string | undefined> {
+	const ref = await getMergeBaseReference();
+	const {content, httpStatus} = await api.v3(
+		`contents/${filePath}?ref=${ref}`,
+		{
+			responseFormat: 'base64',
+			ignoreHttpStatus: 404,
+			headers: {
+				accept: 'application/vnd.github.raw',
+			},
+		},
+	);
+	return httpStatus === 404 ? undefined : content;
+}
+
+async function discardChanges(
+	progress: (message: string) => void,
+	originalFileName: string,
+	newFileName: string,
+	headline: string,
+): Promise<void> {
+	const [headReference, file] = await Promise.all([
+		getHeadReference(),
+		getFile(originalFileName),
+	]);
+
+	const isNewFile = file === undefined;
+	const isRenamed = originalFileName !== newFileName;
+
+	const contents = file ?? '';
+	const newFileDeletion = {deletions: [{path: newFileName}]};
+	const restoreOldFile = {additions: [{path: originalFileName, contents}]};
+	const fileChanges = isRenamed
+		? {...restoreOldFile, ...newFileDeletion} // Renamed, maybe also changed
+		: isNewFile
+		? newFileDeletion // New
+		: restoreOldFile; // Changes
+
+	const {nameWithOwner, branch: prBranch} = getBranches().head;
+	progress('Committing…');
+
+	await api.v4(
+		`
+		mutation discardChanges ($input: CreateCommitOnBranchInput!) {
+			createCommitOnBranch(input: $input) {
+				commit {
+					oid
 				}
 			}
 		}
-	`);
-	return repository.file;
+	`,
+		{
+			variables: {
+				input: {
+					branch: {
+						repositoryNameWithOwner: nameWithOwner,
+						branchName: prBranch,
+					},
+					expectedHeadOid: headReference,
+					fileChanges,
+					message: {
+						headline,
+					},
+				},
+			},
+		},
+	);
 }
 
-async function restoreFile(progress: (message: string) => void, menuItem: Element, filePath: string): Promise<void> {
-	const file = await getFile(filePath);
+function getFilenames(menuItem: HTMLElement): {original: string; new: string} {
+	// Legacy view: get filenames from the data-path and Link--primary elements
+	if (menuItem.tagName === 'BUTTON') {
+		const [originalFileName, newFileName = originalFileName] = $(
+			'.Link--primary',
+			closestElement('[data-path]', menuItem),
+		)
+			.textContent
+			.split(' → ', 2);
 
-	if (!file) {
-		// The file was created by this PR.
-		// This code won’t be reached if `highlight-deleted-and-added-files-in-diffs` works.
-		throw new Error('Nothing to restore. Delete file instead');
+		return {original: originalFileName, new: newFileName};
 	}
 
-	if (file.isTruncated) {
-		throw new Error('Restore failed: File too big');
-	}
+	// New React view: get filenames from the file header
+	const fileNameElement = $('[class*="file-name"]', focusedFileContainer);
+	const span = $optional('span:not(.sr-only)', fileNameElement);
+	const [originalFileName, newFileName = originalFileName] = (span ?? fileNameElement)
+		.textContent.split('  ').map(text => text.replaceAll('\u{200E}', ''));
 
-	let {pathname} = menuItem.previousElementSibling as HTMLAnchorElement;
-	// Check if file was deleted by PR
-	if (menuItem.closest('[data-file-deleted="true"]')) {
-		progress('Undeleting…');
-		const [nameWithOwner, headBranch] = select('.head-ref')!.title.split(':');
-		pathname = `/${nameWithOwner}/new/${headBranch}?filename=${filePath}`;
-	} else {
-		progress('Committing…');
-	}
-
-	const content = file.text;
-	// This is either an `edit` or `create` form
-	const form = (await fetchDom(pathname, 'form.js-blob-form'))!;
-	form.elements.value.value = content; // Restore content (`value` is the name of the file content field)
-	form.elements.message.value = (form.elements.message as HTMLInputElement).placeholder
-		.replace(/^Create|^Update/, 'Restore');
-
-	const response = await pushForm(form);
-	if (!response.ok) {
-		throw new Error(response.statusText);
-	}
+	return {original: originalFileName, new: newFileName};
 }
 
-const filesRestored = new WeakSet<HTMLButtonElement>();
-async function handleRestoreFileClick(event: delegate.Event<MouseEvent, HTMLButtonElement>): Promise<void> {
+async function handleClick(event: DelegateEvent<MouseEvent, HTMLButtonElement>): Promise<void> {
 	const menuItem = event.delegateTarget;
+	const filenames = getFilenames(menuItem);
 
-	// Only allow one click
-	if (filesRestored.has(menuItem)) {
+	const commitTitle = prompt(
+		'Are you sure you want to discard these changes? Enter the commit title',
+		`Discard changes to ${filenames.original}`,
+	);
+
+	if (!commitTitle) {
 		return;
 	}
 
-	filesRestored.add(menuItem);
+	await showToast(async progress => discardChanges(progress, filenames.original, filenames.new, commitTitle), {
+		message: 'Loading info…',
+		doneMessage: 'Changes discarded',
+	});
 
-	try {
-		const filePath = menuItem.closest<HTMLDivElement>('[data-path]')!.dataset.path!;
-		// Show toast while restoring
-		await showToast(async progress => restoreFile(progress!, menuItem, filePath), {
-			message: 'Restoring…',
-			doneMessage: 'Restored!',
-		});
-
-		// Hide file from view
-		menuItem.closest('.file')!.remove();
-	} catch (error: unknown) {
-		features.log.error(__filebasename, error);
+	// Hide file from view
+	if (menuItem.tagName === 'BUTTON') {
+		closestElement('.file', menuItem).remove();
+		return;
 	}
+
+	// New React view: remove the tracked file container and close the menu
+	focusedFileContainer!.remove();
+	closestElement('div[data-focus-trap="active"]', menuItem).remove();
 }
 
-function handleMenuOpening({delegateTarget: dropdown}: delegate.Event): void {
-	const editFile = select('a[aria-label^="Change this"]', dropdown);
-	if (!editFile || select.exists('.rgh-restore-file', dropdown)) {
-		return;
-	}
-
-	if (editFile.closest('.file-header')!.querySelector('[aria-label="File added"]')) {
-		// The file is new. "Restoring" it means deleting it, which is already possible.
-		// Depends on `highlight-deleted-and-added-files-in-diffs`.
-		return;
-	}
-
+// Legacy view handler
+function addLegacyMenuItem(editFile: HTMLAnchorElement): void {
 	editFile.after(
 		<button
-			className="pl-5 dropdown-item btn-link rgh-restore-file"
-			style={{whiteSpace: 'pre-wrap'}}
+			className="pl-5 tmp-pl-5 dropdown-item btn-link rgh-restore-file"
 			role="menuitem"
 			type="button"
 		>
-			Restore file
+			Discard changes
 		</button>,
 	);
 }
 
-function init(): void {
-	// `useCapture` required to be fired before GitHub's handlers
-	delegate(document, '.file-header .js-file-header-dropdown', 'toggle', handleMenuOpening, true);
-	delegate(document, '.rgh-restore-file', 'click', handleRestoreFileClick, true);
+function handleMenuOpening({delegateTarget: menuButton}: DelegateEvent): void {
+	// Don't run if the menu has been closed
+	if (menuButton.ariaExpanded === 'false') {
+		return;
+	}
+
+	// Track the file container for later removal
+	focusedFileContainer = closestElement('div[id^="diff-"]', menuButton);
+
+	// Wait for the menu DOM to be created, but not rendered
+	requestAnimationFrame(() => {
+		const editFile = $('[class^="prc-ActionList-ActionListItem"]:has(.octicon-pencil)');
+		const discardItem = editFile.cloneNode(true);
+		discardItem.classList.add('rgh-restore-file');
+		const link = $('a', discardItem);
+		link.ariaKeyShortcuts = 'd';
+		link.removeAttribute('href');
+		link.removeAttribute('aria-labelledby');
+		$('[class^="prc-ActionList-ItemLabel"]', discardItem).textContent = 'Discard changes';
+		$('[class^="prc-ActionList-LeadingVisual"]', discardItem).replaceChildren(<UndoIcon />);
+
+		editFile.after(discardItem);
+	});
 }
 
-void features.add(__filebasename, {
+async function init(signal: AbortSignal): Promise<void> {
+	// Legacy view
+	observe('.js-file-header-dropdown a[aria-label^="Change this"]', addLegacyMenuItem, {signal});
+
+	// New React view
+	delegate(
+		'[class*="diff-file-header"] button:has(>.octicon-kebab-horizontal)',
+		'click',
+		handleMenuOpening,
+		{signal},
+	);
+
+	// `capture: true` required to be fired before GitHub's handlers
+	delegate('.rgh-restore-file', 'click', handleClick, {capture: true, signal});
+}
+
+void features.add(import.meta.url, {
 	include: [
 		pageDetect.isPRFiles,
-		pageDetect.isPRCommit,
 	],
+	requiresToken: true,
 	init,
 });
+
+/*
+
+Test URLs:
+
+https://github.com/refined-github/sandbox/pull/16/changes
+https://github.com/refined-github/sandbox/pull/29/changes
+https://github.com/refined-github/sandbox/pull/128/changes
+
+*/

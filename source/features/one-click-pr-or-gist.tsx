@@ -1,37 +1,43 @@
 import './one-click-pr-or-gist.css';
-import React from 'dom-chef';
-import select from 'select-dom';
-import * as pageDetect from 'github-url-detection';
 
-import features from '.';
+import cx from 'clsx';
+import React from 'dom-chef';
+import * as pageDetect from 'github-url-detection';
+import {$, $$, $optional, elementExists} from 'select-dom';
+
+import {withTooltipRef} from '../components/tooltip.js';
+import features from '../feature-manager.js';
 
 function init(): void | false {
-	const draftPROption = select('.new-pr-form [name="draft"], #new_gist [name="gist[public]"]');
-	if (!draftPROption) {
+	const initialGroupedButtons = $optional('.BtnGroup:has([name="draft"], [name="gist[public]"])');
+	if (!initialGroupedButtons) {
 		// 1. Free accounts can't open Draft PRs in private repos, so this element is missing
 		// 2. PRs can't be created from some comparison pages: Either base is a tag, not a branch; or there already exists a PR.
 		return false;
 	}
 
-	const initialGroupedButtons = draftPROption.closest('.BtnGroup')!;
+	const parent = initialGroupedButtons.parentElement!;
 
-	for (const dropdownItem of select.all('.select-menu-item', initialGroupedButtons)) {
-		let title = select('.select-menu-item-heading', dropdownItem)!.textContent!.trim();
-		const description = select('.description', dropdownItem)!.textContent!.trim();
-		const radioButton = select('input[type=radio]', dropdownItem)!;
-		const classList = ['btn', 'ml-2', 'tooltipped', 'tooltipped-s'];
+	// Reverse the DOM order to enable the "auto-disable on load" logic
+	// https://github.com/refined-github/refined-github/pull/10130#issuecomment-5889333355
+	for (const dropdownItem of $$('.select-menu-item', initialGroupedButtons).toReversed()) {
+		let title = $('.select-menu-item-heading', dropdownItem).textContent.trim();
+		const description = $('.description', dropdownItem).textContent.trim();
+		const radioButton = $('input[type=radio]', dropdownItem);
+		const classList = ['btn', 'ml-2'];
 
 		if (/\bdraft\b/i.test(title)) {
 			title = 'Create draft PR';
+			classList.push('rgh-draft-pr-button');
 		} else {
 			classList.push('btn-primary');
 		}
 
 		initialGroupedButtons.after(
 			<button
+				ref={withTooltipRef(description)}
 				data-disable-invalid
-				className={classList.join(' ')}
-				aria-label={description}
+				className={cx(classList)}
 				type="submit"
 				name={radioButton.name}
 				value={radioButton.value}
@@ -42,12 +48,31 @@ function init(): void | false {
 	}
 
 	initialGroupedButtons.remove();
+
+	// Add minimal structure validation before adding a dangerous class
+	if (parent.classList.contains('d-flex') && parent.parentElement!.classList.contains('flex-justify-end')) {
+		parent.parentElement!.classList.add('flex-wrap');
+	}
 }
 
-void features.add(__filebasename, {
+void features.add(import.meta.url, {
 	include: [
 		pageDetect.isCompare,
 		pageDetect.isGist,
 	],
+	exclude: [
+		() => elementExists('[data-show-dialog-id="drafts-upgrade-dialog"]'),
+	],
+	awaitDomReady: true,
+	deduplicate: 'has-rgh',
 	init,
 });
+
+/*
+
+Test URLs
+
+- Normal: https://github.com/refined-github/sandbox/compare/default-a...fregante-patch-1
+- "Allow edits from maintainers": https://github.com/refined-github/refined-github/compare/main...fregante:refined-github:main?expand=1
+
+*/

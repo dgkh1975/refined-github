@@ -1,0 +1,29 @@
+/* Stack titles in title edition events to improve readability */
+
+div:has(> span[class^='RenamedTitleEvent']),
+.TimelineItem-body:has(> del.markdown-title) {
+	display: flex;
+	flex-wrap: wrap !important;
+	gap: 0 0.3em;
+}
+
+span[class^='RenamedTitleEvent'],
+.TimelineItem-body .markdown-title:is(del, ins) {
+	flex-basis: 100%;
+	order: 99;
+
+	/* TODO: Drop when adding support for the new issue view */
+	overflow-wrap: break-word !important;
+}
+
+/* GitHub bug */
+.TimelineItem-body del.markdown-title {
+	text-decoration: line-through !important;
+}
+
+/*
+Test URLs
+
+- Issue: https://github.com/refined-github/sandbox/issues/112#event-18404386593
+- PR: https://github.com/refined-github/sandbox/pull/114#event-18404427896
+*/

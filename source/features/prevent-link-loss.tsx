@@ -1,69 +1,60 @@
-import React from 'dom-chef';
-import select from 'select-dom';
-import delegate from 'delegate-it';
-import {AlertIcon} from '@primer/octicons-react';
-import debounceFn from 'debounce-fn';
 import * as pageDetect from 'github-url-detection';
-import * as textFieldEdit from 'text-field-edit';
+import {$optional, closestElement} from 'select-dom';
+import {mount} from 'svelte';
 
-import features from '.';
-import {
-	prCommitUrlRegex,
-	preventPrCommitLinkLoss,
-	prCompareUrlRegex,
-	preventPrCompareLinkLoss,
-	discussionUrlRegex,
-	preventDiscussionLinkLoss,
-} from '../github-helpers/prevent-link-loss';
-import {createRghIssueLink} from '../helpers/rgh-issue-link';
+import features from '../feature-manager.js';
+import observe from '../helpers/selector-observer.js';
+import Banner from './prevent-link-loss.svelte';
 
-function handleButtonClick({delegateTarget: fixButton}: delegate.Event<MouseEvent, HTMLButtonElement>): void {
-	const field = fixButton.form!.querySelector('textarea')!;
-	textFieldEdit.replace(field, prCommitUrlRegex, preventPrCommitLinkLoss);
-	textFieldEdit.replace(field, prCompareUrlRegex, preventPrCompareLinkLoss);
-	textFieldEdit.replace(field, discussionUrlRegex, preventDiscussionLinkLoss);
-	fixButton.parentElement!.remove();
+function attach(field: HTMLTextAreaElement): void {
+	const target = closestElement([
+		// Almost everywhere
+		// Don't use only `fieldset` https://github.com/refined-github/refined-github/issues/9955
+		'*:has(> fieldset)',
+
+		// Editing PR body
+		'.CommentBox',
+	], field);
+
+	mount(Banner, {
+		target,
+		anchor: $optional(':scope > fieldset + *', target), // After fieldset, if found
+		props: {field},
+	});
 }
 
-function getUI(field: HTMLTextAreaElement): HTMLElement {
-	return select('.rgh-prevent-link-loss-container', field.form!) ?? (
-		<div className="flash flash-warn mb-2 rgh-prevent-link-loss-container">
-			<AlertIcon/> Your link may be misinterpreted by GitHub (see {createRghIssueLink(2327)}).
-			<button type="button" className="btn btn-sm primary flash-action rgh-prevent-link-loss">Fix link</button>
-		</div>
+function init(signal: AbortSignal): void {
+	observe(
+		[
+			'textarea.js-comment-field',
+			'[class*="textArea"] textarea',
+		],
+		attach,
+		{signal},
 	);
 }
 
-function isVulnerableToLinkLoss(value: string): boolean {
-	// The replacement logic is not just in the regex, so it alone can't be used to detect the need for the replacement
-	return value !== value.replace(prCommitUrlRegex, preventPrCommitLinkLoss)
-		|| value !== value.replace(prCompareUrlRegex, preventPrCompareLinkLoss)
-		|| value !== value.replace(discussionUrlRegex, preventDiscussionLinkLoss);
-}
-
-const updateUI = debounceFn(({delegateTarget: field}: delegate.Event<Event, HTMLTextAreaElement>): void => {
-	if (!isVulnerableToLinkLoss(field.value)) {
-		getUI(field).remove();
-	} else if (pageDetect.isNewIssue() || pageDetect.isCompare()) {
-		select('file-attachment', field.form!)!.append(
-			<div className="m-2">{getUI(field)}</div>,
-		);
-	} else {
-		select('.form-actions', field.form!)!.prepend(getUI(field));
-	}
-}, {
-	wait: 300,
-});
-
-function init(): void {
-	delegate(document, 'form#new_issue textarea, form.js-new-comment-form textarea, textarea.comment-form-textarea', 'input', updateUI);
-	delegate(document, '.rgh-prevent-link-loss', 'click', handleButtonClick);
-}
-
-void features.add(__filebasename, {
+void features.add(import.meta.url, {
 	include: [
 		pageDetect.hasRichTextEditor,
 	],
-	deduplicate: 'has-rgh-inner',
 	init,
 });
+
+/*
+
+Test content:
+
+```
+https://github.com/refined-github/refined-github/pull/6954/commits/32d1c8b2e1b6971709fe273cfdd1f959b51e8d85
+https://github.com/refined-github/refined-github/pull/6954/changes/32d1c8b2e1b6971709fe273cfdd1f959b51e8d85..5d28ba424368606c7b241840cf4386f23ce66ec3
+```
+
+Test URLs:
+
+New issue form: https://github.com/refined-github/refined-github/issues/new?assignees=&labels=bug&projects=&template=1_bug_report.yml
+New comment form: https://github.com/refined-github/sandbox/issues/3
+New review form: https://github.com/refined-github/sandbox/pull/4/files#review-changes-modal
+New review comment form: https://github.com/refined-github/sandbox/pull/4/files
+
+*/

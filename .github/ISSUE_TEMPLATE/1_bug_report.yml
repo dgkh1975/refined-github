@@ -7,34 +7,49 @@ body:
       value: |
         # Thanks for reporting a bug! ⛰
 
-        Help us replicate the issue by filling in this form. You can use the "Find feature" button in the option to find which feature is causing the issue.
-  - type: checkboxes
-    attributes:
-      label: 'Please ensure:'
-      options:
-        - label: The bug is caused by Refined GitHub. It doesn't happen if I disable the extension.
-          required: true
-  - type: checkboxes
-    attributes:
-      label: 'Include in this issue:'
-      options:
-        - label: Screenshots/video/gif demonstrating the bug, if it’s visual
-        - label: Console errors, if any
-  - type: textarea
+        Help us replicate the issue by filling in this form. You can use the "Identify feature" button in the options page to find which feature is causing the issue.
+
+        Please ensure:
+
+        - The bug is caused by Refined GitHub. It doesn't happen if you disable the extension.
+        - The bug happens after clearing the extension cache. [](#clear-cache)
+          You can find it in the "Debug" section of the <a name="options-page-link">options page</a>.
+
+        Include in this issue:
+
+        - Screenshots/video/gif demonstrating the bug, if it’s visual
+        - Console errors, if any
+
+  - id: description
+    type: textarea
     attributes:
       label: Description
-      description: Describe the issue and how to replicate it
     validations:
       required: true
-  - type: input
+  - id: repro
+    type: textarea
     attributes:
-      label: Example URL
-      description: A REAL URL where the bug appears. If it happens on a private repo, find an equivalent public URL, even if it doesn't happen there.
-      placeholder: https://github.com/refined-github/refined-github/issues
+      label: How to replicate the issue + URL
+      description: ‼️‼️‼️ Every bug report MUST include A REAL, CLICKABLE URL where the bug appears. If it happens on a private repo, find an equivalent public URL, even if it doesn't happen there.
+      placeholder: https://github.com/refined-github/refined-github
     validations:
       required: true
-  - type: input
+  - id: version
+    type: input
+    attributes:
+      label: Extension version
+    validations:
+      required: true
+  - id: browser
+    type: input
     attributes:
       label: Browser(s) used
     validations:
       required: true
+  - id: token
+    type: checkboxes
+    attributes:
+      label: Token ⚠️
+      options:
+        - label: I set a token in the options page. I understand that some features require a token to work.
+          required: true

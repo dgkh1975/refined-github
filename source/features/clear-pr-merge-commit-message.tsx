@@ -1,34 +1,87 @@
-import select from 'select-dom';
+import React from 'dom-chef';
 import * as pageDetect from 'github-url-detection';
+import {$, closestElement, countElements} from 'select-dom';
 
-import features from '.';
-import onPrMergePanelOpen from '../github-events/on-pr-merge-panel-open';
+import features from '../feature-manager.js';
+import getDefaultBranch from '../github-helpers/get-default-branch.js';
+import {userHasPushAccess} from '../github-helpers/get-user-permission.js';
+import {getConversationAuthor} from '../github-helpers/index.js';
+import {getBranches} from '../github-helpers/pr-branches.js';
+import {confirmMergeButton} from '../github-helpers/selectors.js';
+import attachElement from '../helpers/attach-element.js';
+import cleanCommitMessage from '../helpers/clean-commit-message.js';
+import observe from '../helpers/selector-observer.js';
+import {setReactTextareaValue} from '../helpers/set-react-text-field-value.js';
 
-function init(): void {
-	const messageField = select('textarea#merge_message_field')!;
-	const deduplicatedAuthors = new Set();
+const isPrAgainstDefaultBranch = async (): Promise<boolean> => getBranches().base.branch === await getDefaultBranch();
 
-	// This method ensures that "Co-authored-by" capitalization doesn't affect deduplication
-	for (const [, author] of messageField.value.matchAll(/co-authored-by: ([^\n]+)/gi)) {
-		deduplicatedAuthors.add('Co-authored-by: ' + author);
+async function clear(messageField: HTMLTextAreaElement): Promise<void> {
+	if (!/squash/i.test($(confirmMergeButton).textContent)) {
+		return;
 	}
 
-	messageField.value = [...deduplicatedAuthors].join('\n');
+	const originalMessage = messageField.value;
+	const author = getConversationAuthor();
+	let cleanedMessage = cleanCommitMessage(originalMessage, !await isPrAgainstDefaultBranch(), [author]);
+
+	if (cleanedMessage === originalMessage.trim()) {
+		return;
+	}
+
+	cleanedMessage = cleanedMessage ? cleanedMessage + '\n' : '';
+	// Do not use `text-field-edit` #6348
+	setReactTextareaValue(messageField, cleanedMessage);
+
+	let isUndoing = false;
+	function toggleUndoRedo({currentTarget}: React.MouseEvent<HTMLButtonElement>): void {
+		isUndoing = !isUndoing;
+		setReactTextareaValue(messageField, isUndoing ? originalMessage : cleanedMessage);
+		currentTarget.textContent = isUndoing ? 'Redo' : 'Undo';
+	}
+
+	const anchor = closestElement('div[data-has-label]', messageField);
+	attachElement(anchor, {
+		after: () => (
+			<div className="flex-self-stretch">
+				<p className="note">
+					The description field was{' '}
+					<a
+						target="_blank"
+						href="https://github.com/refined-github/refined-github/wiki/Extended-feature-descriptions#clear-pr-merge-commit-message"
+						rel="noreferrer"
+					>
+						cleared
+					</a>{' '}
+					by Refined GitHub. <button type="button" className="btn-link" onClick={toggleUndoRedo}>Undo</button>
+				</p>
+			</div>
+		),
+	});
 }
 
-void features.add(__filebasename, {
-	include: [
+async function init(signal: AbortSignal): Promise<void> {
+	observe('textarea[placeholder="Add an optional extended description…"]', clear, {signal});
+}
+
+void features.add(import.meta.url, {
+	asLongAs: [
 		pageDetect.isPRConversation,
+		userHasPushAccess,
 	],
 	exclude: [
 		// Don't clear 1-commit PRs #3140
-		() => select.all('.TimelineItem.js-commit').length === 1,
+		() => countElements('.TimelineItem.js-commit') === 1,
 	],
-	additionalListeners: [
-		onPrMergePanelOpen,
-	],
-	onlyAdditionalListeners: true,
-	awaitDomReady: false,
-	deduplicate: 'has-rgh-inner',
+	awaitDomReady: true, // Appears near the end of the page anyway
+	requiresToken: true,
 	init,
 });
+
+/*
+
+Test URLs
+
+PR against non-default branch:
+https://github.com/refined-github/sandbox/pull/53
+
+*/

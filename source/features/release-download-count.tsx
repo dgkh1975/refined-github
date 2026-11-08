@@ -1,89 +1,124 @@
+/*
+
+This feature is documented at https://github.com/refined-github/refined-github/wiki/Customization
+
+*/
+
 import './release-download-count.css';
+
+import cx from 'clsx';
 import React from 'dom-chef';
-import select from 'select-dom';
-import {DownloadIcon} from '@primer/octicons-react';
 import * as pageDetect from 'github-url-detection';
 import {abbreviateNumber} from 'js-abbreviation-number';
+import DownloadIcon from 'octicons-plain-react/Download';
+import {$, $$, $optional, closestElement, closestElementOptional} from 'select-dom';
 
-import features from '.';
-import * as api from '../github-helpers/api';
+import features from '../feature-manager.js';
+import api from '../github-helpers/api.js';
+import {assertNodeContent, getClasses} from '../helpers/dom-utils.js';
+import {createHeatIndexFunction} from '../helpers/math.js';
+import observe from '../helpers/selector-observer.js';
+import GetReleaseDownloadCount from './release-download-count.gql';
 
-interface Release {
-	releaseAssets: {
-		nodes: Asset[];
+async function getAssetsForTag(tag: string): Promise<Record<string, number>> {
+	type Asset = {
+		name: string;
+		downloadCount: number;
 	};
+	const {repository} = await api.v4(GetReleaseDownloadCount, {variables: {tag}});
+	const assets: Asset[] = repository.release.releaseAssets.nodes;
+	return Object.fromEntries(assets.map(({name, downloadCount}) => [name, downloadCount]));
 }
 
-interface Asset {
-	name: string;
-	downloadCount: number;
-}
+async function addCounts(assetsList: HTMLElement): Promise<void> {
+	// Both pages have .Box but in the list .Box doesn't include the tag
+	const container = closestElementOptional('section', assetsList) // Single-release page
+		?? closestElement('.Box:not(.Box--condensed)', assetsList); // Releases list, excludes the assets list’s own .Box
 
-type Tag = Record<string, Asset[]>;
-async function getAssetsForTag(tags: string[]): Promise<Tag> {
-	const {repository} = await api.v4(`
-		repository() {
-			${tags.map(tag => `
-				${api.escapeKey(tag)}: release(tagName:"${tag}") {
-					releaseAssets(first: 100) {
-						nodes {
-							name
-							downloadCount
-						}
-					}
-				}
-			`).join(',')}
+	// .octicon-code required by visit-tag feature
+	const releaseName = $(['.octicon-tag ~ span', '.octicon-code ~ span'], container)
+		.textContent
+		.trim();
+
+	const assets = await getAssetsForTag(releaseName);
+
+	const calculateHeatIndex = createHeatIndexFunction(Object.values(assets));
+	for (const assetLink of $$('.octicon-package ~ a', assetsList)) {
+		// Match the asset in the DOM to the asset in the API response
+		const downloadCount = assets[assetLink.pathname.split('/').pop()!] ?? 0;
+
+		// Avoid overflow/overlap
+		const row = closestElement('.Box-row', assetLink);
+		row.classList.add('flex-wrap');
+
+		// Re-align the asset size
+		const assetSize = $(
+			':scope > .flex-justify-end > span:has(+ span relative-time)',
+			row,
+		);
+		assertNodeContent(assetSize.firstChild, /^\d+(?:\.\d+)? \w{2,5}$/);
+
+		assetSize.classList.replace('text-sm-left', 'text-md-right');
+
+		const classes = getClasses(assetSize);
+		if (downloadCount === 0) {
+			// Don't show, but preserve space/column
+			classes.add('v-hidden');
 		}
-	`);
 
-	const assets: Tag = {};
-	for (const [tag, release] of Object.entries(repository)) {
-		assets[tag] = (release as Release).releaseAssets.nodes;
-	}
+		// Add class to parent in order to define "columns"
+		assetSize.parentElement!.classList.add('rgh-release-download-count', 'gap-4');
 
-	return assets;
-}
+		const widget = (
+			<span className={cx(getClasses(assetSize))}>
+				<span
+					className="d-inline-block text-right"
+					title={`${downloadCount} downloads`}
+					data-rgh-heat={calculateHeatIndex(downloadCount)}
+				>
+					{abbreviateNumber(downloadCount)} <DownloadIcon />
+				</span>
+			</span>
+		);
 
-async function init(): Promise<void | false> {
-	const releases = new Map<string, HTMLElement>();
-	for (const release of select.all('.release')) {
-		if (select.exists('.octicon-package', release)) {
-			const name = select('svg.octicon-tag ~ span', release)!.textContent!;
-			releases.set(name, release);
+		const nativeCount = $optional('span[aria-label*="download"]', assetSize.parentElement!);
+		// The native counter doesn't have heat colors, so we replace it anyway.
+		// https://github.com/refined-github/refined-github/issues/9769#issuecomment-4857658434
+		if (nativeCount) {
+			nativeCount.replaceWith(widget);
+		} else {
+			// GitHub omits the native counter for assets without downloads. Insert the widget where the counter would be: after the digest and before the size
+			assetSize.before(widget);
 		}
-	}
 
-	if (releases.size === 0) {
-		return false;
-	}
-
-	const assets = await getAssetsForTag([...releases.keys()]);
-
-	for (const [name, release] of releases) {
-		const sortedDownloads = assets[api.escapeKey(name)].sort((a, b) => b.downloadCount - a.downloadCount);
-		for (const assetName of select.all('.octicon-package ~ span', release)) {
-			// Match the asset in the DOM to the asset in the API response
-			for (const [index, {name, downloadCount}] of sortedDownloads.entries()) {
-				if (name === assetName.textContent && downloadCount > 0) {
-					const classes = 'rgh-release-download-count mr-2 color-text-secondary' + (index === 0 ? ' text-bold' : '');
-					// Place next to asset size
-					assetName
-						.closest('.Box-body')!
-						.querySelector('small')!
-						.before(
-							<small className={classes} title="Downloads">
-								{abbreviateNumber(downloadCount)} <DownloadIcon/>
-							</small>,
-						);
-				}
-			}
+		// Unset all margin we added `gap` like sane people.
+		// Unset via JS because we can't override utility classes.
+		for (const column of assetSize.parentElement!.children) {
+			(column as HTMLElement).style.setProperty('margin', '0', 'important');
 		}
 	}
 }
 
-void features.add(__filebasename, {
+async function init(signal: AbortSignal): Promise<void> {
+	observe('.Box-footer .Box--condensed:has(.octicon-package)', addCounts, {signal});
+}
+
+void features.add(import.meta.url, {
 	include: [
 		pageDetect.isReleasesOrTags,
+		pageDetect.isSingleReleaseOrTag,
 	],
+	requiresToken: true,
 	init,
 });
+
+/*
+
+Test URLs
+
+- One release: https://github.com/refined-github/sandbox/releases/tag/v1.0.0
+- List of releases: https://github.com/cli/cli/releases
+- Lots of assets: https://github.com/notepad-plus-plus/notepad-plus-plus/releases
+- Assets without hashes: https://github.com/NateShoffner/Disable-Nvidia-Telemetry/releases/tag/1.1
+
+*/
